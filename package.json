@@ -1,0 +1,26 @@
+{
+  "name": "ai-video-tool",
+  "version": "1.0.0",
+  "description": "AI-powered video processing tool with auto-summary, reel highlights, and subtitle generation",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js",
+    "install:all": "npm install"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "fs-extra": "^11.3.4",
+    "helmet": "^7.1.0",
+    "multer": "^1.4.5-lts.1",
+    "uuid": "^9.0.0",
+    "yt-dlp-exec": "^1.0.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

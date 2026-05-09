@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/backgroundDark"
+    android:gravity="center">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:layout_centerInParent="true">
+
+        <!-- App Icon / Logo -->
+        <TextView
+            android:id="@+id/splash_logo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🎬"
+            android:textSize="80sp"
+            android:layout_gravity="center" />
+
+        <!-- App Name -->
+        <TextView
+            android:id="@+id/splash_app_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="AI Video Downloader"
+            android:textColor="@color/textPrimary"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:layout_gravity="center"
+            android:layout_marginTop="16dp"
+            android:letterSpacing="0.02" />
+
+        <!-- Tagline -->
+        <TextView
+            android:id="@+id/splash_tagline"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Download from YouTube, Instagram &amp; more"
+            android:textColor="@color/colorPrimary"
+            android:textSize="13sp"
+            android:layout_gravity="center"
+            android:layout_marginTop="8dp"
+            android:gravity="center" />
+
+    </LinearLayout>
+
+    <!-- Version at bottom -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="v1.0.0 • Made by Ranjeet"
+        android:textColor="@color/textSecondary"
+        android:textSize="12sp"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="32dp" />
+
+</RelativeLayout>

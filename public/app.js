@@ -1,3 +1,13 @@
+// ============================================================
+// 📱 Android WebView Detection
+// window.isAndroidApp is injected by MainActivity.java
+// when running inside the Android WebView wrapper
+// ============================================================
+const VERCEL_URL = 'https://your-app.vercel.app'; // ← Replace with your Vercel URL
+const API_BASE = (typeof window !== 'undefined' && window.isAndroidApp)
+  ? `${VERCEL_URL}/api`
+  : '/api';
+
 // --- State Management ---
 const state = {
   videoUrl: '',
@@ -12,7 +22,6 @@ const state = {
   activeJobs: new Map() // jobId -> pollInterval
 };
 
-const API_BASE = '/api';
 
 // --- DOM Elements ---
 const elUrlInput = document.getElementById('video-url');

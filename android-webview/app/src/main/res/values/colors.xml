@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand Colors -->
+    <color name="colorPrimary">#7C3AED</color>
+    <color name="colorPrimaryDark">#5B21B6</color>
+    <color name="colorSecondary">#EC4899</color>
+    <color name="colorAccent">#06B6D4</color>
+
+    <!-- Background Colors -->
+    <color name="backgroundDark">#0F0F1A</color>
+    <color name="backgroundCard">#1A1A2E</color>
+    <color name="backgroundSurface">#16213E</color>
+
+    <!-- Text Colors -->
+    <color name="textPrimary">#F9FAFB</color>
+    <color name="textSecondary">#9CA3AF</color>
+
+    <!-- Status Bar -->
+    <color name="statusBarColor">#0F0F1A</color>
+
+    <!-- Gradient Start/End -->
+    <color name="gradientStart">#7C3AED</color>
+    <color name="gradientEnd">#EC4899</color>
+
+    <!-- White -->
+    <color name="white">#FFFFFF</color>
+</resources>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base Application Theme -->
+    <style name="Theme.AIVideoDownloader" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:windowBackground">@color/backgroundDark</item>
+        <item name="android:statusBarColor">@color/statusBarColor</item>
+        <item name="android:navigationBarColor">@color/backgroundDark</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <!-- Splash Screen Theme (No animation flash) -->
+    <style name="Theme.AIVideoDownloader.Splash" parent="Theme.AIVideoDownloader">
+        <item name="android:windowBackground">@color/backgroundDark</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+
+    <!-- WebView Activity Theme -->
+    <style name="Theme.AIVideoDownloader.WebView" parent="Theme.AIVideoDownloader">
+        <item name="android:windowBackground">@color/backgroundDark</item>
+    </style>
+</resources>

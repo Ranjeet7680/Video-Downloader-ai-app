@@ -26,11 +26,12 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// ✅ Rate limiting
+// ✅ Rate limiting (allows polling without triggering 429)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
-  max: 50,
-  message: { error: 'Too many requests, please try again later.' }
+  max: 1000,
+  skip: (req) => req.path.startsWith('/jobs') || req.path === '/health',
+  message: { error: 'Too many requests, please try again in a few minutes.' }
 });
 app.use('/api/', limiter);
 

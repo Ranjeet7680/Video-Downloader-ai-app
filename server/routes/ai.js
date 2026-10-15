@@ -35,9 +35,9 @@ function ensureSampleReel() {
   return cachedReelPath;
 }
 
-// ✅ POST /api/ai/summarize
+// ✅ POST /api/ai/summarize & /api/ai/summary
 // Generates AI summary from video transcript
-router.post('/summarize', async (req, res) => {
+router.post(['/summarize', '/summary'], async (req, res) => {
   try {
     const { jobId, transcript, videoTitle } = req.body;
 

@@ -1,7 +1,7 @@
 // ============================================================
 // 📱 Android WebView Detection & API Config
 // ============================================================
-const VERCEL_URL = 'https://your-app.vercel.app';
+const VERCEL_URL = 'https://video-downloader-ai-app.vercel.app';
 const API_BASE = (typeof window !== 'undefined' && window.isAndroidApp)
   ? `${VERCEL_URL}/api`
   : '/api';

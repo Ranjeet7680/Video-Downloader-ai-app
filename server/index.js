@@ -7,12 +7,20 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+// ✅ Trust proxy for Vercel reverse proxy and rate limiting
+app.set('trust proxy', 1);
 
-// ✅ Create uploads directory if not exists
-const uploadsDir = process.env.VERCEL ? '/tmp/uploads' : path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+// ✅ Create uploads directory if not exists (Vercel ephemeral /tmp supported)
+const uploadsDir = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
+  ? '/tmp/uploads'
+  : path.join(__dirname, '../uploads');
+
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+} catch (dirErr) {
+  console.warn('Could not initialize uploads dir:', dirErr.message);
 }
 
 // ✅ Security Middleware
@@ -22,8 +30,8 @@ app.use(helmet({
 
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-guest-id'],
 }));
 
 // ✅ Rate limiting (allows polling without triggering 429)
@@ -53,14 +61,33 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/account', accountRoutes);
 
-// ✅ Health check
+// ✅ API Root & Health checks
+app.get('/api', (req, res) => {
+  res.json({
+    status: 'ok',
+    name: 'VideoDownloader AI API',
+    version: '2.0.0',
+    platform: process.env.VERCEL ? 'Vercel Serverless' : 'Node.js Local',
+    endpoints: {
+      health: 'GET /api/health',
+      videoInfo: 'POST /api/video/info',
+      videoDownload: 'POST /api/video/download',
+      videoStream: 'GET /api/video/stream?url=...&quality=720p',
+      userStats: 'GET /api/account/me',
+      plans: 'GET /api/account/plans',
+      history: 'GET /api/account/downloads'
+    }
+  });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    version: '1.0.0',
-    message: '🔥 AI Video Tool is running!',
+    version: '2.0.0',
+    message: '🔥 VideoDownloader AI is running!',
+    platform: process.env.VERCEL ? 'Vercel Serverless' : 'Local Environment',
     timestamp: new Date().toISOString(),
-    features: ['video-download', 'auto-summary', 'reel-highlights', 'subtitles']
+    features: ['video-download', 'stream-direct', 'auto-summary', 'reel-highlights', 'subtitles', 'quotas']
   });
 });
 
@@ -78,10 +105,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`\n🔥 AI Video Tool Server Running!`);
-  console.log(`📡 URL: http://localhost:${PORT}`);
-  console.log(`🌍 API: http://localhost:${PORT}/api/health\n`);
-});
+const PORT = process.env.PORT || 3000;
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`\n🔥 VideoDownloader AI Server Running!`);
+    console.log(`📡 URL: http://localhost:${PORT}`);
+    console.log(`🌍 API: http://localhost:${PORT}/api/health\n`);
+  });
+}
 
 module.exports = app;

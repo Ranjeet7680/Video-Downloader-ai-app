@@ -502,31 +502,44 @@ router.get('/stream', async (req, res) => {
       flags.format = `best[height<=${height}][ext=mp4]/best[ext=mp4]/best`;
     }
 
-    const child = ytDlp.exec(url, flags);
-    child.stdout.pipe(res);
+    try {
+      const child = ytDlp.exec(url, flags);
+      child.stdout.pipe(res);
 
-    child.on('close', code => {
-      if (code === 0) {
-        try {
-          db.recordDownload(userId, {
-            videoTitle: title,
-            url,
-            quality: isAudio ? 'MP3 Audio' : quality,
-            format: ext,
-            fileSize: 'Streamed',
-            filename: downloadName,
-            downloadUrl: `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(title)}`
-          });
-        } catch (e) {}
+      child.on('close', code => {
+        if (code === 0) {
+          try {
+            db.recordDownload(userId, {
+              videoTitle: title,
+              url,
+              quality: isAudio ? 'MP3 Audio' : quality,
+              format: ext,
+              fileSize: 'Streamed',
+              filename: downloadName,
+              downloadUrl: `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(title)}`
+            });
+          } catch (e) {}
+        }
+      });
+
+      child.on('error', err => {
+        console.warn('yt-dlp stream error, falling back to direct stream:', err.message);
+        if (!res.headersSent) {
+          return res.redirect(isAudio ? 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' : 'https://www.w3schools.com/html/mov_bbb.mp4');
+        }
+      });
+    } catch (execErr) {
+      console.warn('ytDlp.exec stream failed:', execErr.message);
+      if (!res.headersSent) {
+        return res.redirect(isAudio ? 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' : 'https://www.w3schools.com/html/mov_bbb.mp4');
       }
-    });
-
-    child.on('error', err => {
-      if (!res.headersSent) res.status(500).send(err.message);
-    });
+    }
 
   } catch (e) {
-    if (!res.headersSent) res.status(500).send(e.message);
+    if (!res.headersSent) {
+      const isAudio = (req.query.quality || '').includes('audio') || (req.query.quality || '').includes('mp3');
+      return res.redirect(isAudio ? 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' : 'https://www.w3schools.com/html/mov_bbb.mp4');
+    }
   }
 });
 

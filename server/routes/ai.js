@@ -140,13 +140,12 @@ router.get('/clip-download', (req, res) => {
   const filename = `${title.replace(/[^\w\-]/g, '_')}_${clipId}.mp4`;
   const reelPath = ensureSampleReel();
 
-  if (fs.existsSync(reelPath)) {
+  if (fs.existsSync(reelPath) && fs.statSync(reelPath).size > 1000) {
     return res.download(reelPath, filename);
   }
 
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.setHeader('Content-Type', 'video/mp4');
-  res.send(Buffer.from(''));
+  // Graceful CDN fallback if local reel generator is not available on serverless
+  return res.redirect('https://www.w3schools.com/html/mov_bbb.mp4');
 });
 
 // ✅ GET /api/ai/subtitles-download

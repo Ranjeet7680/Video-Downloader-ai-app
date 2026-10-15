@@ -4,12 +4,16 @@ const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 
 // Persistent data directory
-const DATA_DIR = process.env.VERCEL ? '/tmp/data' : path.join(__dirname, '../../data');
+const DATA_DIR = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) ? '/tmp/data' : path.join(__dirname, '../../data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
 // Ensure directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.warn('Could not initialize DATA_DIR:', e.message);
 }
 
 // Initial plans definition
@@ -136,6 +140,9 @@ function loadDb() {
 function saveDb() {
   if (!dbData) return;
   try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
     const raw = JSON.stringify(dbData, null, 2);
     fs.writeFileSync(DB_FILE, raw, 'utf8');
     const stat = fs.statSync(DB_FILE);

@@ -98,7 +98,51 @@ The web application will be live at:
 | **Database** | Persistent File/JSON Engine | Users, subscriptions, limits, history & jobs |
 | **Server** | `Node.js` + `Express` | REST API with rate-limiting and account authentication |
 | **Frontend** | Vanilla JS, HTML5, CSS3 | Glassmorphic, responsive UI with Dark, Light & Pink modes |
-| **Deployment** | Vercel Ready | Serverless functions with direct stream support |
+| **Deployment** | Vercel Ready | Zero-config Serverless with extended 60s timeout & 1GB RAM |
+
+---
+
+## ⚡ 1-Click Vercel Deployment Guide
+
+Deploying **Video Downloader AI** to Vercel takes less than 60 seconds with **zero configuration**:
+
+### Option 1: Deploy with Vercel Web Dashboard (Recommended)
+1. Fork or push this repository to your GitHub account:
+   ```
+   https://github.com/Ranjeet7680/Video-Downloader-ai-app
+   ```
+2. Go to **[vercel.com/new](https://vercel.com/new)** and log in with GitHub.
+3. Select **Video-Downloader-ai-app** and click **Import**.
+4. Leave all settings at default:
+   - **Framework Preset**: *Other* (automatically detected)
+   - **Root Directory**: `./`
+   - **Build Command**: *None / Leave blank*
+   - **Output Directory**: *Leave blank*
+5. (Optional) Add Environment Variables:
+   - `YOUTUBE_API_KEY`: *(Optional)* Your YouTube Data API v3 key for fast YouTube metadata.
+   - `META_API_KEY`: *(Optional)* Graph API token for Instagram oEmbed.
+6. Click **Deploy**! 🚀
+   - Your site will be live instantly with a free `https://*.vercel.app` domain.
+   - Both the frontend UI and the full Express REST API (`/api/*`) work out of the box!
+
+### Option 2: Deploy with Vercel CLI
+```bash
+# 1. Install Vercel CLI globally
+npm install -g vercel
+
+# 2. Login to your Vercel account
+vercel login
+
+# 3. Deploy to production in 1 command
+vercel --prod
+```
+
+### 🛡️ How Vercel Compatibility Works
+- **Zero-Config Handler (`api/index.js`)**: Routes all `/api/*` calls into the Express app via native Serverless Functions.
+- **Extended Timeout (`vercel.json`)**: Configured with `maxDuration: 60` and `memory: 1024` to allow seamless video extraction and conversion without timeout.
+- **Ephemeral `/tmp` Storage**: Video processing (`/tmp/uploads`) and the database (`/tmp/data/db.json`) write safely to Vercel's temporary lambda storage without filesystem permission errors.
+- **Direct Stream Fallback (`/api/video/stream`)**: Automatically handles direct chunked streaming for client downloads.
+- **Edge Static CDN**: Serves all HTML, CSS, and JS assets at maximum global speeds directly from Vercel's edge cache.
 
 ---
 

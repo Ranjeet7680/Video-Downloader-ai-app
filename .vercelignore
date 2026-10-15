@@ -1,0 +1,14 @@
+# Files and directories to exclude from Vercel deployment bundle
+.git
+.github
+android-webview/
+ANDROID_SETUP.md
+capacitor.config.json
+test.pdf
+test-ytdlp.js
+start.bat
+uploads/
+data/*.json
+data/*.tmp*
+.env*.local
+*.log

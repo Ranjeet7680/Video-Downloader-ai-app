@@ -300,6 +300,7 @@ async function fetchRealMetadataFallback(url, platform) {
   let durationSeconds = 165;
   let views = '🔥 Trending Video';
   let uploadDate = new Date().toISOString().split('T')[0];
+  let directVideoUrl = null;
 
   const ytId = extractYouTubeId(url);
 

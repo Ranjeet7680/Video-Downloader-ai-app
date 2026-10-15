@@ -25,6 +25,41 @@ try {
 const UPLOADS_DIR = process.env.VERCEL ? '/tmp/uploads' : path.join(__dirname, '../../uploads');
 fsExtra.ensureDirSync(UPLOADS_DIR);
 
+const BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
+
+// Helper: map platform to high-resolution placeholder
+function getPlatformPlaceholder(platform) {
+  const map = {
+    YouTube: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=640&q=80',
+    Instagram: 'https://images.unsplash.com/photo-1611262588024-d12430b98920?w=640&q=80',
+    Facebook: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=640&q=80',
+    TikTok: 'https://images.unsplash.com/photo-1598899134739-24c46f58b8c0?w=640&q=80',
+    'Twitter / X': 'https://images.unsplash.com/photo-1611605698335-8b1569810432?w=640&q=80',
+    Reddit: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=640&q=80',
+    Pinterest: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=640&q=80',
+    Vimeo: 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=640&q=80'
+  };
+  return map[platform] || 'https://images.unsplash.com/photo-1536240478700-b869070f9279?w=640&q=80';
+}
+
+// Helper: robust platform detection
+function detectPlatform(url, rawPlatform = '') {
+  const p = (rawPlatform || '').toLowerCase();
+  const u = (url || '').toLowerCase();
+
+  if (p.includes('youtube') || u.includes('youtube.com') || u.includes('youtu.be')) return 'YouTube';
+  if (p.includes('instagram') || u.includes('instagram.com')) return 'Instagram';
+  if (p.includes('facebook') || p.includes('fb') || u.includes('facebook.com') || u.includes('fb.watch') || u.includes('fb.me')) return 'Facebook';
+  if (p.includes('tiktok') || u.includes('tiktok.com')) return 'TikTok';
+  if (p.includes('twitter') || u.includes('twitter.com') || u.includes('x.com')) return 'Twitter / X';
+  if (p.includes('reddit') || u.includes('reddit.com') || u.includes('v.redd.it')) return 'Reddit';
+  if (p.includes('pinterest') || u.includes('pinterest.com') || u.includes('pin.it')) return 'Pinterest';
+  if (p.includes('linkedin') || u.includes('linkedin.com')) return 'LinkedIn';
+  if (p.includes('vimeo') || u.includes('vimeo.com')) return 'Vimeo';
+  if (p.includes('dailymotion') || u.includes('dailymotion.com') || u.includes('dai.ly')) return 'Dailymotion';
+  return 'Web Video';
+}
+
 // Helper: sanitize filenames
 function sanitizeFilename(name) {
   if (!name) return 'video';
@@ -277,56 +312,50 @@ router.post('/info', async (req, res) => {
       }
     }
 
-    // yt-dlp Metadata Extraction
+    // yt-dlp Metadata Extraction with browser emulation
     let videoData;
     try {
       const info = await ytDlp(url, {
         dumpSingleJson: true,
         noWarnings: true,
-        noCheckCertificate: true
+        noCheckCertificate: true,
+        userAgent: BROWSER_USER_AGENT,
+        referer: url,
+        addHeader: [
+          'Accept-Language:en-US,en;q=0.9',
+          'Sec-Fetch-Mode:navigate'
+        ]
       });
 
       const formats = info.formats || [];
-      const durationSec = info.duration || 0;
+      const durationSec = info.duration || 60;
       const qualities = buildQualitiesList(formats, durationSec);
-
-      let platform = info.extractor_key || info.extractor || 'Web';
-      if (/youtube/i.test(platform)) platform = 'YouTube';
-      else if (/instagram/i.test(platform)) platform = 'Instagram';
-      else if (/tiktok/i.test(platform)) platform = 'TikTok';
-      else if (/twitter|x\.com/i.test(platform)) platform = 'Twitter';
-      else if (/vimeo/i.test(platform)) platform = 'Vimeo';
+      const platform = detectPlatform(url, info.extractor_key || info.extractor);
 
       videoData = {
-        title: info.title || 'Untitled Video',
-        thumbnail: info.thumbnail || 'https://picsum.photos/640/360',
+        title: info.title || `${platform} Video`,
+        thumbnail: info.thumbnail || getPlatformPlaceholder(platform),
         duration: formatDuration(durationSec),
         durationSeconds: durationSec,
-        channel: info.uploader || info.channel || '@creator',
-        views: info.view_count ? formatNumber(info.view_count) + ' views' : 'N/A',
+        channel: info.uploader || info.channel || `@${platform.toLowerCase().replace(/[^a-z0-9]/g, '')}_creator`,
+        views: info.view_count ? formatNumber(info.view_count) + ' views' : '🔥 Popular Stream',
         uploadDate: info.upload_date
           ? `${info.upload_date.slice(0, 4)}-${info.upload_date.slice(4, 6)}-${info.upload_date.slice(6, 8)}`
-          : 'Unknown',
+          : 'Recent',
         qualities: qualities,
         platform: platform
       };
     } catch (ytError) {
       console.warn('yt-dlp info failed, using fallback mock data:', ytError.message);
 
-      let platform = 'Web';
-      if (url.includes('youtube.com') || url.includes('youtu.be')) platform = 'YouTube';
-      else if (url.includes('instagram.com')) platform = 'Instagram';
-      else if (url.includes('tiktok.com')) platform = 'TikTok';
-      else if (url.includes('vimeo.com')) platform = 'Vimeo';
-      else if (url.includes('twitter.com') || url.includes('x.com')) platform = 'Twitter';
-
+      const platform = detectPlatform(url);
       videoData = {
-        title: `${platform} Video`,
-        thumbnail: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=640&q=80',
+        title: `${platform} Video Stream`,
+        thumbnail: getPlatformPlaceholder(platform),
         duration: '2:15',
         durationSeconds: 135,
-        channel: `@${platform.toLowerCase()}_creator`,
-        views: '25.4K views',
+        channel: `@${platform.toLowerCase().replace(/[^a-z0-9]/g, '')}_creator`,
+        views: '🔥 Popular Stream',
         uploadDate: new Date().toISOString().split('T')[0],
         qualities: buildQualitiesList([], 135),
         platform: platform
@@ -519,12 +548,18 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
     const baseFilename = `${cleanTitle}_${quality}_${shortId}`;
     const outputTemplate = path.join(UPLOADS_DIR, `${baseFilename}.%(ext)s`);
 
-    // Build yt-dlp arguments
+    // Build yt-dlp arguments with browser emulation
     const flags = {
       output: outputTemplate,
       noWarnings: true,
       noCheckCertificate: true,
-      newline: true
+      newline: true,
+      userAgent: BROWSER_USER_AGENT,
+      referer: url,
+      addHeader: [
+        'Accept-Language:en-US,en;q=0.9',
+        'Sec-Fetch-Mode:navigate'
+      ]
     };
 
     if (ffmpegPath) {

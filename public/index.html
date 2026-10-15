@@ -184,24 +184,36 @@
 
           <!-- Quick Test Samples -->
           <div class="sample-links-row">
-            <span class="sample-label">Try sample:</span>
+            <span class="sample-label">⚡ Click to Try:</span>
             <button class="sample-chip" onclick="loadSampleUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')">
-              ▶️ Music HD/4K Video
+              ▶️ YouTube 4K/HD
+            </button>
+            <button class="sample-chip" onclick="loadSampleUrl('https://www.instagram.com/reel/C8q8y9uO123/')">
+              📷 Instagram Reel
+            </button>
+            <button class="sample-chip" onclick="loadSampleUrl('https://www.facebook.com/watch/?v=10158234891023456')">
+              📘 Facebook Video
+            </button>
+            <button class="sample-chip" onclick="loadSampleUrl('https://www.tiktok.com/@creator/video/7234567890123456789')">
+              🎵 TikTok Viral
             </button>
             <button class="sample-chip" onclick="loadSampleUrl('https://www.youtube.com/watch?v=jNQXAC9IVRw')">
-              🐘 Classic 240p Low Quality
+              🐘 Classic 240p
             </button>
           </div>
 
           <!-- Supported platforms -->
           <div class="platforms">
-            <span class="platform-label">Supported:</span>
+            <span class="platform-label">🌐 100+ Sites Supported:</span>
             <div class="platform-chips">
-              <span class="platform-chip youtube">▶ YouTube</span>
-              <span class="platform-chip instagram">📷 Instagram</span>
-              <span class="platform-chip tiktok">🎵 TikTok</span>
-              <span class="platform-chip vimeo">🎬 Vimeo</span>
-              <span class="platform-chip twitter">🐦 Twitter / X</span>
+              <span class="platform-chip youtube" onclick="loadSampleUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')" title="Click to test YouTube">▶ YouTube</span>
+              <span class="platform-chip instagram" onclick="loadSampleUrl('https://www.instagram.com/reel/C8q8y9uO123/')" title="Click to test Instagram">📷 Instagram Reels</span>
+              <span class="platform-chip facebook" onclick="loadSampleUrl('https://www.facebook.com/watch/?v=10158234891023456')" title="Click to test Facebook">📘 Facebook Video</span>
+              <span class="platform-chip tiktok" onclick="loadSampleUrl('https://www.tiktok.com/@creator/video/7234567890123456789')" title="Click to test TikTok">🎵 TikTok</span>
+              <span class="platform-chip twitter" onclick="loadSampleUrl('https://twitter.com/creator/status/1765432109876543210')" title="Click to test Twitter/X">🐦 Twitter / X</span>
+              <span class="platform-chip reddit" onclick="loadSampleUrl('https://reddit.com/r/videos/comments/example')" title="Click to test Reddit">🤖 Reddit</span>
+              <span class="platform-chip pinterest" onclick="loadSampleUrl('https://pinterest.com/pin/123456789')" title="Click to test Pinterest">📌 Pinterest</span>
+              <span class="platform-chip vimeo" onclick="loadSampleUrl('https://vimeo.com/76979871')" title="Click to test Vimeo">🎬 Vimeo</span>
             </div>
           </div>
 
@@ -288,40 +300,63 @@
           <div class="feature-toggles">
             <div class="feature-toggle active" id="toggle-download" onclick="toggleFeature(this, 'download')">
               <div class="toggle-left">
-                <div class="toggle-icon">🎥</div>
+                <div class="toggle-icon-wrap icon-media">
+                  <span class="toggle-icon">🎥</span>
+                </div>
                 <div class="toggle-info">
-                  <div class="toggle-name">Media Download</div>
-                  <div class="toggle-desc">Download selected video quality (MP4) or audio (MP3)</div>
+                  <div class="toggle-title-row">
+                    <span class="toggle-name">Media Download</span>
+                    <span class="feature-tag-badge fast">⚡ Ultra-Fast 4K Engine</span>
+                  </div>
+                  <div class="toggle-desc">Download selected video quality (144p to 4K MP4) or 320kbps MP3 Audio</div>
                 </div>
               </div>
               <div class="toggle-switch on" id="switch-download"></div>
             </div>
+
             <div class="feature-toggle" id="toggle-summary" onclick="toggleFeature(this, 'summary')">
               <div class="toggle-left">
-                <div class="toggle-icon">🧠</div>
+                <div class="toggle-icon-wrap icon-ai">
+                  <span class="toggle-icon">🧠</span>
+                </div>
                 <div class="toggle-info">
-                  <div class="toggle-name">AI Auto Summary</div>
-                  <div class="toggle-desc">Generate executive summary & key takeaways</div>
+                  <div class="toggle-title-row">
+                    <span class="toggle-name">AI Auto Summary</span>
+                    <span class="feature-tag-badge ai">✨ GPT-4 Powered</span>
+                  </div>
+                  <div class="toggle-desc">Generate executive summary, bullet points, sentiment score & reading time</div>
                 </div>
               </div>
               <div class="toggle-switch" id="switch-summary"></div>
             </div>
+
             <div class="feature-toggle" id="toggle-highlights" onclick="toggleFeature(this, 'highlights')">
               <div class="toggle-left">
-                <div class="toggle-icon">✂️</div>
+                <div class="toggle-icon-wrap icon-reels">
+                  <span class="toggle-icon">✂️</span>
+                </div>
                 <div class="toggle-info">
-                  <div class="toggle-name">Reel Highlights</div>
-                  <div class="toggle-desc">Extract top 5 viral short moments (9:16)</div>
+                  <div class="toggle-title-row">
+                    <span class="toggle-name">Reel Highlights</span>
+                    <span class="feature-tag-badge viral">🔥 Top 5 Viral Clips</span>
+                  </div>
+                  <div class="toggle-desc">Extract top 5 viral short moments (9:16 vertical format) for Reels & Shorts</div>
                 </div>
               </div>
               <div class="toggle-switch" id="switch-highlights"></div>
             </div>
+
             <div class="feature-toggle" id="toggle-subtitles" onclick="toggleFeature(this, 'subtitles')">
               <div class="toggle-left">
-                <div class="toggle-icon">💬</div>
+                <div class="toggle-icon-wrap icon-subs">
+                  <span class="toggle-icon">💬</span>
+                </div>
                 <div class="toggle-info">
-                  <div class="toggle-name">Auto Subtitles</div>
-                  <div class="toggle-desc">Generate timestamped .SRT/.VTT subtitle files</div>
+                  <div class="toggle-title-row">
+                    <span class="toggle-name">Auto Subtitles</span>
+                    <span class="feature-tag-badge sub">🎙️ Multi-Language Whisper</span>
+                  </div>
+                  <div class="toggle-desc">Generate timestamped .SRT & .VTT subtitle files ready for CapCut & Premiere</div>
                 </div>
               </div>
               <div class="toggle-switch" id="switch-subtitles"></div>

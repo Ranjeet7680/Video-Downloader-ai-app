@@ -45,10 +45,12 @@ app.use('/uploads', express.static(uploadsDir));
 const videoRoutes = require('./routes/video');
 const aiRoutes = require('./routes/ai');
 const jobRoutes = require('./routes/jobs');
+const accountRoutes = require('./routes/account');
 
 app.use('/api/video', videoRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/jobs', jobRoutes);
+app.use('/api/account', accountRoutes);
 
 // ✅ Health check
 app.get('/api/health', (req, res) => {

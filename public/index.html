@@ -4,11 +4,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Video Downloader AI — Download Low to High Quality (144p to 4K) & MP3</title>
+  <title>Video Downloader AI — Low to High Quality (144p to 4K) & MP3 Downloader</title>
   <meta name="description"
-    content="High-speed video downloader: download videos in any quality from 144p, 360p, 720p, 1080p to 4K, extract MP3 audio, and use AI for smart summaries, highlights, and subtitles." />
+    content="Download videos in any quality from 144p Data Saver to 4K Ultra HD & 320kbps MP3 audio. Track downloads, upgrade subscription, and manage records." />
   <meta property="og:title" content="Video Downloader AI — 144p to 4K & MP3 Downloader 🔥" />
-  <meta property="og:description" content="Download YouTube, Instagram, TikTok & Vimeo in 144p to 4K UHD with AI summaries & subtitles" />
+  <meta property="og:description" content="Download YouTube, Instagram, TikTok & Vimeo in 144p to 4K UHD with subscription plans & download records." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -37,17 +37,35 @@
         </div>
         <span class="logo-text">Video<span class="logo-accent">Downloader AI</span></span>
       </div>
+
       <nav class="nav">
-        <a href="#tool" class="nav-link">Download Tool</a>
+        <a href="#tool" class="nav-link">Download</a>
+        <a href="#pricing" class="nav-link">Pricing & Plans</a>
         <a href="#quality-guide" class="nav-link">Quality Guide</a>
-        <a href="#features" class="nav-link">AI Features</a>
-        <a href="#how-it-works" class="nav-link">How It Works</a>
+        <a href="#features" class="nav-link">Features</a>
       </nav>
+
       <div class="header-controls">
-        <div class="header-badge">
-          <span class="badge-dot"></span>
-          <span>144p → 4K UHD</span>
+        <!-- Records / History Button -->
+        <button class="nav-btn records-btn" onclick="openHistoryModal()" title="View Download Records">
+          <span>📋 Records</span>
+          <span class="badge-count" id="header-history-count">0</span>
+        </button>
+
+        <!-- Current Plan Pill -->
+        <div class="plan-pill" id="header-plan-pill" onclick="openPricingModal()" title="View or Upgrade Plan">
+          <span class="plan-dot"></span>
+          <span id="header-plan-name">Free Plan</span>
+          <span class="plan-quota" id="header-plan-quota">(3 left)</span>
         </div>
+
+        <!-- User Profile / Auth Button -->
+        <button class="user-btn" id="header-user-btn" onclick="openAuthModal()">
+          <span id="user-btn-icon">👤</span>
+          <span id="user-btn-text">Account</span>
+        </button>
+
+        <!-- Theme Switcher -->
         <div class="theme-switcher">
           <button class="theme-btn active" data-set-theme="dark" title="Night Mode">🌙</button>
           <button class="theme-btn" data-set-theme="light" title="Day Mode">☀️</button>
@@ -69,14 +87,14 @@
       </h1>
       <p class="hero-desc">
         Choose from Data Saver 144p up to Crystal Clear 1080p Full HD & 4K Ultra HD.<br />
-        Extract MP3 audio, generate AI summaries, find viral reels, and get subtitles in seconds.
+        Manage your subscription, track download records, and enjoy high-speed video saving.
       </p>
       <div class="hero-cta">
         <a href="#tool" class="btn btn-primary">
           <span>⚡ Download Video Now</span>
         </a>
-        <a href="#quality-guide" class="btn btn-ghost">
-          <span>Compare Qualities →</span>
+        <a href="#pricing" class="btn btn-ghost">
+          <span>View Plans & Pricing →</span>
         </a>
       </div>
       <div class="hero-stats">
@@ -91,31 +109,9 @@
         </div>
         <div class="stat-divider"></div>
         <div class="stat">
-          <span class="stat-num">100% Free</span>
-          <span class="stat-label">Fast & No Limits</span>
+          <span class="stat-num">Records</span>
+          <span class="stat-label">Database History Tracking</span>
         </div>
-      </div>
-    </div>
-    <!-- Floating Info Cards -->
-    <div class="floating-card card-summary">
-      <div class="fc-icon">🎬</div>
-      <div class="fc-content">
-        <div class="fc-label">4K & 1080p FHD</div>
-        <div class="fc-value">Crystal Clear Video</div>
-      </div>
-    </div>
-    <div class="floating-card card-clips">
-      <div class="fc-icon">📱</div>
-      <div class="fc-content">
-        <div class="fc-label">144p - 480p Saver</div>
-        <div class="fc-value">Saves 90% Mobile Data</div>
-      </div>
-    </div>
-    <div class="floating-card card-subs">
-      <div class="fc-icon">🎵</div>
-      <div class="fc-content">
-        <div class="fc-label">Audio Only MP3</div>
-        <div class="fc-value">320kbps High Bitrate</div>
       </div>
     </div>
   </section>
@@ -124,16 +120,48 @@
   <section class="tool-section" id="tool">
     <div class="section-inner">
       <div class="section-tag">🛠️ All-in-One Engine</div>
-      <h2 class="section-title">Video Downloader & AI Suite</h2>
-      <p class="section-desc">Paste your link, select your exact quality from low to high, and download instantly</p>
+      <h2 class="section-title">Video Downloader & Quality Studio</h2>
+      <p class="section-desc">Paste your link, select your quality, track your quota, and save directly to your device</p>
 
       <div class="tool-container">
-        <!-- Step 1: URL Input -->
+        <!-- Step 1: URL Input & Quota Banner -->
         <div class="tool-panel" id="panel-url">
-          <div class="tool-panel-header">
+
+          <!-- User Quota & Plan Status Card -->
+          <div class="user-quota-card" id="user-quota-card">
+            <div class="quota-left">
+              <div class="quota-badge-wrap">
+                <span class="quota-plan-badge" id="quota-plan-badge">FREE STARTER</span>
+                <span class="quota-title" id="quota-title">Daily Download Limit</span>
+              </div>
+              <div class="quota-progress-container">
+                <div class="quota-progress-bar">
+                  <div class="quota-progress-fill" id="quota-progress-fill" style="width: 0%;"></div>
+                </div>
+                <div class="quota-text-row">
+                  <span id="quota-usage-text"><strong>0</strong> of <strong>3</strong> Free Downloads Used Today</span>
+                  <span class="quota-remaining" id="quota-remaining-text">3 left</span>
+                </div>
+              </div>
+            </div>
+            <div class="quota-right">
+              <button class="upgrade-cta-btn" onclick="openPricingModal()">
+                ⚡ Upgrade for Unlimited
+              </button>
+            </div>
+          </div>
+
+          <!-- Plan Expiry Warning Banner (Hidden by default) -->
+          <div class="plan-alert-banner" id="plan-alert-banner" style="display:none;">
+            <span id="plan-alert-msg">⚠️ Your subscription has expired. Click to renew and restore your downloads.</span>
+            <button class="renew-btn-mini" onclick="renewSubscription()">🔄 Renew Plan</button>
+          </div>
+
+          <div class="tool-panel-header" style="margin-top: 1.25rem;">
             <span class="tool-step-badge">Step 1</span>
             <h3>🔗 Enter Video URL</h3>
           </div>
+
           <div class="url-input-wrap">
             <div class="url-input-inner">
               <div class="url-icon">
@@ -156,7 +184,7 @@
 
           <!-- Quick Test Samples -->
           <div class="sample-links-row">
-            <span class="sample-label">Try a quick sample:</span>
+            <span class="sample-label">Try sample:</span>
             <button class="sample-chip" onclick="loadSampleUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')">
               ▶️ Music HD/4K Video
             </button>
@@ -167,7 +195,7 @@
 
           <!-- Supported platforms -->
           <div class="platforms">
-            <span class="platform-label">Supported Platforms:</span>
+            <span class="platform-label">Supported:</span>
             <div class="platform-chips">
               <span class="platform-chip youtube">▶ YouTube</span>
               <span class="platform-chip instagram">📷 Instagram</span>
@@ -336,6 +364,34 @@
     </div>
   </section>
 
+  <!-- PRICING & SUBSCRIPTION SECTION -->
+  <section class="pricing-section" id="pricing">
+    <div class="section-inner">
+      <div class="section-tag">💳 Simple, Transparent Pricing</div>
+      <h2 class="section-title">Choose Your Subscription Plan</h2>
+      <p class="section-desc">Unlock unlimited downloads, crystal-clear 4K resolution, and high-speed audio extraction</p>
+
+      <!-- Currency & Cycle Controls -->
+      <div class="pricing-controls">
+        <div class="cycle-switch-container">
+          <button class="cycle-btn active" id="cycle-monthly" onclick="setBillingCycle('monthly')">Monthly</button>
+          <button class="cycle-btn" id="cycle-yearly" onclick="setBillingCycle('yearly')">
+            Yearly <span class="discount-badge">Save 20%</span>
+          </button>
+        </div>
+        <div class="currency-switch-container">
+          <button class="currency-btn active" id="curr-inr" onclick="setCurrency('INR')">🇮🇳 ₹ INR</button>
+          <button class="currency-btn" id="curr-usd" onclick="setCurrency('USD')">🇺🇸 $ USD</button>
+        </div>
+      </div>
+
+      <!-- Pricing Cards Grid -->
+      <div class="pricing-grid" id="pricing-grid">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+    </div>
+  </section>
+
   <!-- Quality Guide Section -->
   <section class="quality-guide-section" id="quality-guide">
     <div class="section-inner">
@@ -347,11 +403,11 @@
         <div class="guide-card">
           <div class="guide-badge saver">DATA SAVER (144p - 360p)</div>
           <h3>📱 Low / Mobile Friendly</h3>
-          <p>Super fast downloads with minimal data usage. Perfect for slow 2G/3G connections or saving mobile gigabytes.</p>
+          <p>Super fast downloads with minimal data usage. Perfect for slow connections or saving cellular data.</p>
           <ul class="guide-list">
             <li>✅ File size: ~2 MB - 8 MB</li>
             <li>✅ Instant loading & saving</li>
-            <li>✅ Ideal for podcasts & voice-driven videos</li>
+            <li>✅ Included in all plans (Free, Pro, VIP)</li>
           </ul>
         </div>
         <div class="guide-card featured">
@@ -371,7 +427,7 @@
           <ul class="guide-list">
             <li>✅ File size: ~80 MB - 300+ MB</li>
             <li>✅ Maximum detail and high frame rates</li>
-            <li>✅ Ideal for editing and archiving</li>
+            <li>✅ Unlocked with VIP Unlimited Plan</li>
           </ul>
         </div>
         <div class="guide-card">
@@ -452,125 +508,164 @@
     </div>
   </section>
 
-  <!-- How It Works Section -->
-  <section class="how-it-works" id="how-it-works">
-    <div class="section-inner">
-      <div class="section-tag">⚙️ Simple Workflow</div>
-      <h2 class="section-title">How It Works</h2>
-      <div class="pipeline">
-        <div class="pipeline-step">
-          <div class="pipeline-num">01</div>
-          <div class="pipeline-icon">🔗</div>
-          <div class="pipeline-content">
-            <h4>Paste Link</h4>
-            <p>Paste video URL from any platform</p>
+  <!-- MODAL: Download Limit Reached -->
+  <div class="modal-overlay" id="limit-modal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-icon warning">⚠️</div>
+        <h3>Daily Download Limit Reached!</h3>
+        <button class="modal-close-btn" onclick="closeLimitModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="limit-msg" id="limit-modal-msg">
+          You have used all <strong>3 free downloads</strong> for today on the Free Starter plan.
+        </p>
+        <div class="limit-progress-box">
+          <div class="limit-bar-bg">
+            <div class="limit-bar-fill" style="width: 100%;"></div>
           </div>
-          <div class="pipeline-arrow">→</div>
+          <span class="limit-ratio-text">3 / 3 Used (100%)</span>
         </div>
-        <div class="pipeline-step">
-          <div class="pipeline-num">02</div>
-          <div class="pipeline-icon">🎚️</div>
-          <div class="pipeline-content">
-            <h4>Select Quality</h4>
-            <p>Pick from 144p, 720p, 1080p, 4K or MP3</p>
+        <p class="limit-subtext">
+          Upgrade to <strong>Pro</strong> (50 downloads/day) or <strong>VIP</strong> (Unlimited downloads) to continue downloading instantly!
+        </p>
+        <div class="limit-plan-choices">
+          <div class="limit-choice-card" onclick="subscribeToPlan('pro')">
+            <div class="lc-badge">POPULAR</div>
+            <div class="lc-title">Pro Creator</div>
+            <div class="lc-price">₹199 / mo</div>
+            <div class="lc-desc">50 Downloads/day • 1080p FHD • MP3 Audio</div>
+            <button class="lc-btn">Upgrade to Pro</button>
           </div>
-          <div class="pipeline-arrow">→</div>
-        </div>
-        <div class="pipeline-step">
-          <div class="pipeline-num">03</div>
-          <div class="pipeline-icon">⚡</div>
-          <div class="pipeline-content">
-            <h4>FFmpeg Engine</h4>
-            <p>Merges high-def video + stereo audio</p>
-          </div>
-          <div class="pipeline-arrow">→</div>
-        </div>
-        <div class="pipeline-step">
-          <div class="pipeline-num">04</div>
-          <div class="pipeline-icon">🤖</div>
-          <div class="pipeline-content">
-            <h4>AI Processing</h4>
-            <p>Optional summary & subtitle creation</p>
-          </div>
-          <div class="pipeline-arrow">→</div>
-        </div>
-        <div class="pipeline-step last">
-          <div class="pipeline-num">05</div>
-          <div class="pipeline-icon">📦</div>
-          <div class="pipeline-content">
-            <h4>Save Directly</h4>
-            <p>One-click direct file download</p>
+          <div class="limit-choice-card featured" onclick="subscribeToPlan('vip')">
+            <div class="lc-badge vip">UNLIMITED</div>
+            <div class="lc-title">VIP Unlimited</div>
+            <div class="lc-price">₹499 / mo</div>
+            <div class="lc-desc">Unlimited Downloads (∞) • 4K UHD • Priority Speed</div>
+            <button class="lc-btn vip">Get Unlimited VIP</button>
           </div>
         </div>
       </div>
     </div>
-  </section>
+  </div>
 
-  <!-- FAQ Section -->
-  <section class="faq-section" id="faq">
-    <div class="section-inner">
-      <div class="section-tag">❓ Questions & Answers</div>
-      <h2 class="section-title">Frequently Asked Questions</h2>
-      <div class="faq-grid">
-        <div class="faq-card">
-          <h4>Does 1080p and 4K have sound included?</h4>
-          <p>Yes! We use an integrated FFmpeg engine to automatically merge separate high-definition video streams with high-bitrate audio streams, so your downloaded 1080p or 4K video always has full stereo audio.</p>
+  <!-- MODAL: Download Records / History -->
+  <div class="modal-overlay" id="history-modal" style="display:none;">
+    <div class="modal-card large">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon">📋</span>
+          <div>
+            <h3>My Download Records</h3>
+            <p>Your previous downloads stored securely in the database</p>
+          </div>
         </div>
-        <div class="faq-card">
-          <h4>How do I download video in Low Quality to save mobile data?</h4>
-          <p>Simply select <strong>144p</strong>, <strong>240p</strong>, or <strong>360p (Data Saver)</strong> from the quality cards. These files are ultra-compact and download in seconds.</p>
-        </div>
-        <div class="faq-card">
-          <h4>Can I download only the MP3 audio file?</h4>
-          <p>Yes! Choose <strong>Audio Only (MP3)</strong> in the quality options. The tool extracts high-fidelity 320kbps MP3 audio directly from the video.</p>
-        </div>
-        <div class="faq-card">
-          <h4>Where are the downloaded files saved?</h4>
-          <p>Clicking "Save to Device" downloads the file directly into your browser's default Downloads folder on your phone or computer with a clean, readable filename.</p>
-        </div>
+        <button class="modal-close-btn" onclick="closeHistoryModal()">✕</button>
       </div>
-    </div>
-  </section>
+      <div class="modal-body">
+        <div class="history-stats-bar">
+          <div class="h-stat">
+            <span class="h-stat-num" id="h-total-count">0</span>
+            <span class="h-stat-label">Total Downloads</span>
+          </div>
+          <div class="h-stat">
+            <span class="h-stat-num" id="h-today-count">0</span>
+            <span class="h-stat-label">Downloads Today</span>
+          </div>
+          <div class="h-stat">
+            <span class="h-stat-num" id="h-active-plan">Free</span>
+            <span class="h-stat-label">Active Plan</span>
+          </div>
+        </div>
 
-  <!-- Tech Stack Section -->
-  <section class="tech-section" id="tech">
-    <div class="section-inner">
-      <div class="section-tag">🔧 Technology</div>
-      <h2 class="section-title">Engineered With</h2>
-      <div class="tech-grid">
-        <div class="tech-card">
-          <div class="tech-icon">⚡</div>
-          <div class="tech-name">yt-dlp</div>
-          <div class="tech-desc">Multi-Platform Downloader</div>
-        </div>
-        <div class="tech-card">
-          <div class="tech-icon">🎬</div>
-          <div class="tech-name">FFmpeg 6.1</div>
-          <div class="tech-desc">Video/Audio Merging</div>
-        </div>
-        <div class="tech-card">
-          <div class="tech-icon">🎙️</div>
-          <div class="tech-name">Whisper AI</div>
-          <div class="tech-desc">Speech-to-Text</div>
-        </div>
-        <div class="tech-card">
-          <div class="tech-icon">🤖</div>
-          <div class="tech-name">GPT-4</div>
-          <div class="tech-desc">AI Summarization</div>
-        </div>
-        <div class="tech-card">
-          <div class="tech-icon">🟢</div>
-          <div class="tech-name">Node.js 24</div>
-          <div class="tech-desc">High-Performance Server</div>
-        </div>
-        <div class="tech-card">
-          <div class="tech-icon">🔥</div>
-          <div class="tech-name">Express</div>
-          <div class="tech-desc">REST API Architecture</div>
+        <div class="history-list" id="history-list">
+          <!-- Populated by app.js -->
         </div>
       </div>
     </div>
-  </section>
+  </div>
+
+  <!-- MODAL: User Auth & Account Profile -->
+  <div class="modal-overlay" id="auth-modal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon">👤</span>
+          <h3 id="auth-modal-title">My Account</h3>
+        </div>
+        <button class="modal-close-btn" onclick="closeAuthModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Logged In View -->
+        <div id="auth-profile-view" style="display:none;">
+          <div class="profile-card">
+            <div class="profile-avatar" id="prof-avatar">👤</div>
+            <div class="profile-meta">
+              <h4 id="prof-name">User Name</h4>
+              <span id="prof-email">user@example.com</span>
+              <div class="prof-badge-row">
+                <span class="prof-plan-pill" id="prof-plan">FREE PLAN</span>
+                <span class="prof-status-pill" id="prof-status">Active</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="profile-details-list">
+            <div class="pd-row">
+              <span>Daily Downloads Used:</span>
+              <strong id="prof-used">0 / 3</strong>
+            </div>
+            <div class="pd-row">
+              <span>Total Downloads:</span>
+              <strong id="prof-total">0</strong>
+            </div>
+            <div class="pd-row">
+              <span>Subscription Expiration:</span>
+              <strong id="prof-expiry">Never (Free)</strong>
+            </div>
+          </div>
+
+          <div class="profile-actions-row">
+            <button class="result-btn primary" onclick="closeAuthModal(); openPricingModal();">
+              💳 Manage / Upgrade Plan
+            </button>
+            <button class="result-btn ghost" onclick="logoutUser()">
+              🚪 Sign Out
+            </button>
+          </div>
+        </div>
+
+        <!-- Auth Form (Sign In / Register) -->
+        <div id="auth-form-view">
+          <div class="auth-tabs">
+            <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Sign In</button>
+            <button class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Create Account</button>
+          </div>
+
+          <form id="auth-form" onsubmit="handleAuthSubmit(event)">
+            <div class="form-group" id="group-name" style="display:none;">
+              <label>Your Name</label>
+              <input type="text" id="auth-name" placeholder="John Doe" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label>Email Address</label>
+              <input type="email" id="auth-email" required placeholder="you@example.com" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label>Password</label>
+              <input type="password" id="auth-password" required placeholder="••••••••" class="form-input" />
+            </div>
+            <button type="submit" class="auth-submit-btn" id="auth-submit-btn">
+              Sign In
+            </button>
+          </form>
+          <div class="auth-footnote">
+            Your downloads are automatically saved to your account in real time.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Rating Section -->
   <section class="rating-section" id="rating">

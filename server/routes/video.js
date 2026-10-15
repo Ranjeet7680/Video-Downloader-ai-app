@@ -7,6 +7,7 @@ const fsExtra = require('fs-extra');
 const axios = require('axios');
 const ytDlp = require('yt-dlp-exec');
 const jobStore = require('../utils/jobStore');
+const db = require('../utils/db');
 
 // Locate ffmpeg-static if available
 let ffmpegPath = null;
@@ -281,7 +282,6 @@ router.post('/info', async (req, res) => {
       const info = await ytDlp(url, {
         dumpSingleJson: true,
         noWarnings: true,
-        noCallHome: true,
         noCheckCertificate: true
       });
 
@@ -343,10 +343,11 @@ router.post('/info', async (req, res) => {
 });
 
 // ✅ POST /api/video/download
-// Start video or audio download job
+// Start video or audio download job with database limit enforcement
 router.post('/download', async (req, res) => {
   try {
-    const { url, quality = '720p', title } = req.body;
+    const { url, quality = '720p', title, thumbnail } = req.body;
+    const userId = req.headers['x-user-id'] || req.headers['x-guest-id'] || req.body.userId || 'guest_default';
 
     if (!url) {
       return res.status(400).json({ error: 'Video URL is required' });
@@ -358,14 +359,28 @@ router.post('/download', async (req, res) => {
       return res.status(400).json({ error: 'Please enter a valid HTTP/HTTPS video URL.' });
     }
 
+    // Check download limit and plan quality tier in database
+    const check = db.canUserDownload(userId, quality);
+    if (!check.allowed) {
+      return res.status(403).json({
+        success: false,
+        limitReached: true,
+        reason: check.reason,
+        message: check.message,
+        stats: check.stats
+      });
+    }
+
     // Create job
     const jobId = uuidv4();
     const job = {
       id: jobId,
       type: 'download',
+      userId,
       url,
       quality,
       title: title || 'Video',
+      thumbnail: thumbnail || '',
       status: 'processing',
       progress: 5,
       currentStep: '🚀 Queued for processing...',
@@ -376,13 +391,14 @@ router.post('/download', async (req, res) => {
     jobStore.set(jobId, job);
 
     // Start background download
-    processDownload(jobId, url, quality, title);
+    processDownload(jobId, url, quality, title, userId, thumbnail);
 
     res.json({
       success: true,
       jobId,
       message: `🎥 Download started at ${quality}!`,
-      quality
+      quality,
+      stats: check.stats
     });
   } catch (error) {
     console.error('Download route error:', error);
@@ -410,8 +426,82 @@ router.get('/file/:filename', (req, res) => {
   });
 });
 
-// Core Download Processor
-async function processDownload(jobId, url, quality = '720p', title = 'video') {
+// ✅ GET /api/video/stream
+// Direct streaming download endpoint for Vercel and serverless deployment
+router.get('/stream', async (req, res) => {
+  try {
+    const { url, quality = '720p', title = 'video' } = req.query;
+    const userId = req.headers['x-user-id'] || req.headers['x-guest-id'] || req.query.userId || 'guest_default';
+
+    if (!url) return res.status(400).send('URL is required');
+
+    const check = db.canUserDownload(userId, quality);
+    if (!check.allowed) {
+      return res.status(403).json({
+        success: false,
+        limitReached: true,
+        reason: check.reason,
+        message: check.message,
+        stats: check.stats
+      });
+    }
+
+    const isAudio = quality === 'audio' || quality === 'audio-mp3' || quality === 'mp3';
+    const cleanTitle = sanitizeFilename(title);
+    const ext = isAudio ? 'mp3' : 'mp4';
+    const downloadName = `${cleanTitle}_${quality}.${ext}`;
+
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
+    res.setHeader('Content-Type', isAudio ? 'audio/mpeg' : 'video/mp4');
+
+    const flags = {
+      output: '-', // stream to stdout
+      noWarnings: true,
+      noCheckCertificate: true
+    };
+    if (ffmpegPath) flags.ffmpegLocation = ffmpegPath;
+
+    if (isAudio) {
+      flags.format = 'bestaudio/best';
+      flags.extractAudio = true;
+      flags.audioFormat = 'mp3';
+    } else if (quality === 'best') {
+      flags.format = 'best[ext=mp4]/best';
+    } else {
+      const height = parseInt(quality.replace('p', '')) || 720;
+      flags.format = `best[height<=${height}][ext=mp4]/best[ext=mp4]/best`;
+    }
+
+    const child = ytDlp.exec(url, flags);
+    child.stdout.pipe(res);
+
+    child.on('close', code => {
+      if (code === 0) {
+        try {
+          db.recordDownload(userId, {
+            videoTitle: title,
+            url,
+            quality: isAudio ? 'MP3 Audio' : quality,
+            format: ext,
+            fileSize: 'Streamed',
+            filename: downloadName,
+            downloadUrl: `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(title)}`
+          });
+        } catch (e) {}
+      }
+    });
+
+    child.on('error', err => {
+      if (!res.headersSent) res.status(500).send(err.message);
+    });
+
+  } catch (e) {
+    if (!res.headersSent) res.status(500).send(e.message);
+  }
+});
+
+// Core Download Processor with Database Recording
+async function processDownload(jobId, url, quality = '720p', title = 'video', userId = 'guest_default', thumbnail = '') {
   try {
     const job = jobStore.get(jobId);
     if (!job) return;
@@ -432,7 +522,6 @@ async function processDownload(jobId, url, quality = '720p', title = 'video') {
     const flags = {
       output: outputTemplate,
       noWarnings: true,
-      noCallHome: true,
       noCheckCertificate: true,
       newline: true
     };
@@ -475,7 +564,6 @@ async function processDownload(jobId, url, quality = '720p', title = 'video') {
       if (child.stdout) {
         child.stdout.on('data', chunk => {
           const text = chunk.toString();
-          // Regex for yt-dlp download progress line
           const match = text.match(/\[download\]\s+([\d\.]+)%\s+of\s+([^\s]+)\s+at\s+([^\s]+)\s+ETA\s+([^\s]+)/i);
           if (match) {
             const pct = parseFloat(match[1]);
@@ -483,7 +571,6 @@ async function processDownload(jobId, url, quality = '720p', title = 'video') {
             const speed = match[3];
             const eta = match[4];
 
-            // Map download 0-100% into job 15-92%
             const mappedProgress = Math.min(Math.round(15 + (pct * 0.77)), 92);
             job.progress = mappedProgress;
             job.currentStep = `⬇️ Downloading: ${pct.toFixed(0)}% of ${total} (${speed} • ETA ${eta})`;
@@ -529,6 +616,23 @@ async function processDownload(jobId, url, quality = '720p', title = 'video') {
           downloadUrl: `/api/video/file/${matchedFile}?name=${encodeURIComponent(userDownloadName)}`
         };
         jobStore.set(jobId, job);
+
+        // Record download in persistent database
+        try {
+          db.recordDownload(userId, {
+            videoTitle: title || 'Video',
+            url,
+            thumbnail: thumbnail || '',
+            quality: isAudio ? 'MP3 Audio (320k)' : quality,
+            format: finalExt,
+            fileSize: sizeMB,
+            filename: matchedFile,
+            downloadUrl: `/api/video/file/${matchedFile}?name=${encodeURIComponent(userDownloadName)}`
+          });
+        } catch (dbErr) {
+          console.error('Failed to record download in DB:', dbErr.message);
+        }
+
         return;
       }
 
@@ -557,6 +661,19 @@ async function processDownload(jobId, url, quality = '720p', title = 'video') {
         downloadUrl: fallbackUrl
       };
       jobStore.set(jobId, job);
+
+      try {
+        db.recordDownload(userId, {
+          videoTitle: title || 'Demo Media',
+          url,
+          thumbnail: thumbnail || '',
+          quality: isAudio ? 'MP3 Audio' : quality,
+          format: fallbackExt,
+          fileSize: isAudio ? '3.8 MB' : '15.4 MB',
+          filename: fallbackName,
+          downloadUrl: fallbackUrl
+        });
+      } catch (e) {}
     }
   } catch (error) {
     console.error('Process download error:', error);

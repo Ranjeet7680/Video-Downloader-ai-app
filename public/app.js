@@ -6,13 +6,21 @@ const API_BASE = (typeof window !== 'undefined' && window.isAndroidApp)
   ? `${VERCEL_URL}/api`
   : '/api';
 
-// --- State Management ---
+// --- Global User & App State ---
 const state = {
+  userId: getOrCreateUserId(),
+  user: null,
+  stats: null,
+  plans: [],
+  billingCycle: 'monthly', // 'monthly' | 'yearly'
+  currency: 'INR', // 'INR' | 'USD'
+  authTab: 'login', // 'login' | 'register'
+  
   videoUrl: '',
   videoInfo: null,
   qualities: [],
   selectedQualityId: '720p',
-  sortOrder: 'asc', // 'asc' = Low to High (144p -> 4K), 'desc' = High to Low (4K -> 144p)
+  sortOrder: 'asc', // 'asc' = Low to High, 'desc' = High to Low
   filterType: 'all', // 'all', 'hd', 'saver', 'audio'
   features: {
     download: true,
@@ -23,6 +31,24 @@ const state = {
   subtitleLang: 'en',
   activeJobs: new Map() // jobId -> pollInterval
 };
+
+// --- Helper: Local User ID Management ---
+function getOrCreateUserId() {
+  let id = localStorage.getItem('agy_user_id');
+  if (!id) {
+    id = `guest_${Math.random().toString(36).substring(2, 11)}_${Date.now().toString(36)}`;
+    localStorage.setItem('agy_user_id', id);
+  }
+  return id;
+}
+
+// Common headers for all API requests
+function getApiHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'x-user-id': state.userId
+  };
+}
 
 // --- DOM Elements ---
 const elUrlInput = document.getElementById('video-url');
@@ -43,20 +69,40 @@ const elSqBtnLabel = document.getElementById('sq-btn-label');
 const elSortIcon = document.getElementById('sort-icon');
 const elSortLabel = document.getElementById('sort-label');
 
+// Header & Quota Elements
+const elHeaderPlanName = document.getElementById('header-plan-name');
+const elHeaderPlanQuota = document.getElementById('header-plan-quota');
+const elHeaderUserBtn = document.getElementById('header-user-btn');
+const elUserBtnText = document.getElementById('user-btn-text');
+const elHeaderHistoryCount = document.getElementById('header-history-count');
+const elQuotaPlanBadge = document.getElementById('quota-plan-badge');
+const elQuotaProgressFill = document.getElementById('quota-progress-fill');
+const elQuotaUsageText = document.getElementById('quota-usage-text');
+const elQuotaRemainingText = document.getElementById('quota-remaining-text');
+const elPlanAlertBanner = document.getElementById('plan-alert-banner');
+const elPlanAlertMsg = document.getElementById('plan-alert-msg');
+const elPricingGrid = document.getElementById('pricing-grid');
+
 // --- Initialization ---
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
   initRating();
+  initInputListeners();
 
+  // Load account info, plans, and history
+  await loadUserAccount();
+  await loadPlans();
+  loadHistoryCount();
+});
+
+function initInputListeners() {
   if (elUrlInput) {
     elUrlInput.addEventListener('input', (e) => {
       state.videoUrl = e.target.value.trim();
       toggleClearButton(!!state.videoUrl);
-      if (state.videoUrl) {
-        if (elProcessBtn) {
-          elProcessBtn.disabled = true;
-          elProcessBtn.style.opacity = '0.5';
-        }
+      if (state.videoUrl && elProcessBtn) {
+        elProcessBtn.disabled = true;
+        elProcessBtn.style.opacity = '0.5';
       }
     });
 
@@ -72,13 +118,457 @@ document.addEventListener('DOMContentLoaded', () => {
     elProcessBtn.disabled = true;
     elProcessBtn.style.opacity = '0.5';
   }
-});
+}
 
-// --- URL & Clipboard Helpers ---
-function toggleClearButton(show) {
-  if (elClearBtn) {
-    elClearBtn.style.display = show ? 'block' : 'none';
+// -------------------------------------------------------------
+// USER ACCOUNT & QUOTA ENGINE
+// -------------------------------------------------------------
+async function loadUserAccount() {
+  try {
+    const res = await fetch(`${API_BASE}/account/me`, {
+      headers: getApiHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    state.stats = data.data;
+    state.user = data.data.user;
+    updateQuotaUI(data.data);
+  } catch (err) {
+    console.warn('Could not load account stats:', err.message);
   }
+}
+
+function updateQuotaUI(stats) {
+  if (!stats) return;
+
+  const plan = stats.plan || { name: 'Free Starter', dailyLimit: 3 };
+  const isUnlimited = stats.isUnlimited;
+  const used = stats.downloadsToday || 0;
+  const limit = stats.dailyLimit || 3;
+  const remaining = stats.remainingToday;
+  const isGuest = stats.user.isGuest;
+
+  // 1. Header controls
+  if (elHeaderPlanName) elHeaderPlanName.innerText = plan.name;
+  if (elHeaderPlanQuota) {
+    elHeaderPlanQuota.innerText = isUnlimited ? '(∞ Unlimited)' : `(${remaining} left)`;
+  }
+  if (elUserBtnText) {
+    elUserBtnText.innerText = isGuest ? 'Account' : stats.user.name.split(' ')[0];
+  }
+
+  // 2. Quota Card in Step 1
+  if (elQuotaPlanBadge) {
+    elQuotaPlanBadge.innerText = (plan.badge || plan.name).toUpperCase();
+    elQuotaPlanBadge.className = `quota-plan-badge badge-${plan.id}`;
+  }
+
+  if (elQuotaProgressFill) {
+    const pct = isUnlimited ? 100 : Math.min(100, Math.round((used / limit) * 100));
+    elQuotaProgressFill.style.width = `${pct}%`;
+    elQuotaProgressFill.className = pct >= 100 ? 'quota-progress-fill full' : 'quota-progress-fill';
+  }
+
+  if (elQuotaUsageText) {
+    if (isUnlimited) {
+      elQuotaUsageText.innerHTML = `<strong>${used}</strong> Videos Downloaded Today • Unlimited Downloads Active`;
+    } else {
+      elQuotaUsageText.innerHTML = `<strong>${used}</strong> of <strong>${limit}</strong> Downloads Used Today (${plan.name})`;
+    }
+  }
+
+  if (elQuotaRemainingText) {
+    elQuotaRemainingText.innerText = isUnlimited ? 'Unlimited' : `${remaining} left today`;
+  }
+
+  // 3. Subscription Expiration / Renewal Alert
+  if (elPlanAlertBanner) {
+    if (stats.subscription && stats.subscription.isExpired) {
+      elPlanAlertBanner.style.display = 'flex';
+      if (elPlanAlertMsg) {
+        elPlanAlertMsg.innerText = `⚠️ Your ${stats.subscription.planName} subscription has expired. Click here to renew.`;
+      }
+    } else {
+      elPlanAlertBanner.style.display = 'none';
+    }
+  }
+
+  // Render pricing plans with active status
+  renderPricingGrid();
+}
+
+// -------------------------------------------------------------
+// PRICING & SUBSCRIPTION SYSTEM
+// -------------------------------------------------------------
+async function loadPlans() {
+  try {
+    const res = await fetch(`${API_BASE}/account/plans`);
+    const data = await res.json();
+    if (res.ok && data.data) {
+      state.plans = data.data;
+      renderPricingGrid();
+    }
+  } catch (e) {
+    console.error('Failed to load plans:', e);
+  }
+}
+
+function setBillingCycle(cycle) {
+  state.billingCycle = cycle;
+  document.getElementById('cycle-monthly').classList.toggle('active', cycle === 'monthly');
+  document.getElementById('cycle-yearly').classList.toggle('active', cycle === 'yearly');
+  renderPricingGrid();
+}
+
+function setCurrency(curr) {
+  state.currency = curr;
+  document.getElementById('curr-inr').classList.toggle('active', curr === 'INR');
+  document.getElementById('curr-usd').classList.toggle('active', curr === 'USD');
+  renderPricingGrid();
+}
+
+function renderPricingGrid() {
+  if (!elPricingGrid || !state.plans || state.plans.length === 0) return;
+
+  const currentPlanId = state.stats ? state.stats.plan.id : 'free';
+  const sub = state.stats ? state.stats.subscription : null;
+  const isYearly = state.billingCycle === 'yearly';
+  const isINR = state.currency === 'INR';
+
+  const html = state.plans.map(p => {
+    const isCurrent = p.id === currentPlanId;
+    const isFree = p.id === 'free';
+    const priceVal = isFree ? 0 : (isINR
+      ? (isYearly ? p.priceYearlyINR : p.priceMonthlyINR)
+      : (isYearly ? p.priceYearlyUSD : p.priceMonthlyUSD));
+    const symbol = isINR ? '₹' : '$';
+    const period = isFree ? 'forever' : (isYearly ? '/ year' : '/ month');
+
+    let buttonHtml = '';
+    if (isCurrent && !isFree) {
+      if (sub && sub.isExpired) {
+        buttonHtml = `<button class="plan-btn renew" onclick="renewSubscription()">🔄 Plan Expired - Click to Renew</button>`;
+      } else {
+        const days = sub ? sub.daysRemaining : 30;
+        buttonHtml = `<button class="plan-btn active" disabled>✓ Active Plan (${days} days left)</button>`;
+      }
+    } else if (isCurrent && isFree) {
+      buttonHtml = `<button class="plan-btn current" disabled>Current Free Plan</button>`;
+    } else {
+      buttonHtml = `<button class="plan-btn select ${p.id === 'vip' ? 'vip' : 'primary'}" onclick="subscribeToPlan('${p.id}')">
+        ${p.id === 'vip' ? '⚡ Select Unlimited VIP' : '🚀 Select Pro Plan'}
+      </button>`;
+    }
+
+    return `
+      <div class="pricing-card ${p.isPopular ? 'popular' : ''} ${isCurrent ? 'active-plan-card' : ''} ${p.id === 'vip' ? 'vip-card' : ''}">
+        ${p.badge ? `<div class="pricing-badge ${p.id}">${p.badge}</div>` : ''}
+        <div class="p-header">
+          <h3 class="p-title">${p.name}</h3>
+          <p class="p-desc">${p.description}</p>
+        </div>
+        <div class="p-price-wrap">
+          <span class="p-price">${isFree ? 'Free' : `${symbol}${priceVal}`}</span>
+          <span class="p-period">${period}</span>
+        </div>
+        <ul class="p-features">
+          ${p.features.map(f => `<li><span class="f-check">✓</span> ${f}</li>`).join('')}
+        </ul>
+        <div class="p-footer">
+          ${buttonHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  elPricingGrid.innerHTML = html;
+}
+
+async function subscribeToPlan(planId) {
+  try {
+    showToast(`Activating ${planId.toUpperCase()} subscription...`);
+    const res = await fetch(`${API_BASE}/account/subscribe`, {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify({
+        planId,
+        billingCycle: state.billingCycle,
+        paymentMethod: 'instant'
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Subscription failed');
+
+    state.stats = data.stats;
+    updateQuotaUI(data.stats);
+    closeLimitModal();
+
+    showToast(`🎉 Welcome to ${data.plan.name}! Download limits upgraded!`, 'success');
+  } catch (err) {
+    showToast(err.message || 'Subscription failed', 'error');
+  }
+}
+
+async function renewSubscription() {
+  try {
+    showToast('Renewing your subscription for 30 days...');
+    const res = await fetch(`${API_BASE}/account/renew`, {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify({})
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Renewal failed');
+
+    state.stats = data.stats;
+    updateQuotaUI(data.stats);
+    showToast(`🎉 Subscription renewed successfully!`, 'success');
+  } catch (err) {
+    showToast(err.message || 'Renewal failed', 'error');
+  }
+}
+
+// -------------------------------------------------------------
+// DOWNLOAD RECORDS & HISTORY
+// -------------------------------------------------------------
+async function loadHistoryCount() {
+  try {
+    const res = await fetch(`${API_BASE}/account/history`, {
+      headers: getApiHeaders()
+    });
+    const data = await res.json();
+    if (res.ok && elHeaderHistoryCount) {
+      elHeaderHistoryCount.innerText = data.total || 0;
+    }
+  } catch (e) {}
+}
+
+async function openHistoryModal() {
+  const modal = document.getElementById('history-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  try {
+    const res = await fetch(`${API_BASE}/account/history`, {
+      headers: getApiHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    const list = data.data || [];
+    renderHistoryList(list);
+
+    if (document.getElementById('h-total-count')) {
+      document.getElementById('h-total-count').innerText = list.length;
+    }
+    if (document.getElementById('h-today-count') && state.stats) {
+      document.getElementById('h-today-count').innerText = state.stats.downloadsToday || 0;
+    }
+    if (document.getElementById('h-active-plan') && state.stats) {
+      document.getElementById('h-active-plan').innerText = state.stats.plan.name;
+    }
+    if (elHeaderHistoryCount) {
+      elHeaderHistoryCount.innerText = list.length;
+    }
+  } catch (err) {
+    showToast('Failed to load history', 'error');
+  }
+}
+
+function closeHistoryModal() {
+  const modal = document.getElementById('history-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function renderHistoryList(items) {
+  const container = document.getElementById('history-list');
+  if (!container) return;
+
+  if (items.length === 0) {
+    container.innerHTML = `
+      <div class="history-empty">
+        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📂</div>
+        <p>No downloads recorded yet. Paste a video URL and start downloading!</p>
+      </div>
+    `;
+    return;
+  }
+
+  const html = items.map(item => {
+    const dateStr = new Date(item.downloadedAt).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    const isAudio = item.quality.toLowerCase().includes('audio') || item.format === 'mp3';
+
+    return `
+      <div class="history-item" id="hitem-${item.id}">
+        <div class="h-thumb-wrap">
+          <img src="${item.thumbnail || 'https://picsum.photos/120/68'}" alt="thumb" class="h-thumb" onerror="this.src='https://picsum.photos/120/68'" />
+          <span class="h-format-pill">${(item.format || 'mp4').toUpperCase()}</span>
+        </div>
+        <div class="h-info">
+          <div class="h-title">${item.videoTitle || 'Untitled Video'}</div>
+          <div class="h-meta">
+            <span class="h-badge">${item.quality}</span>
+            <span>•</span>
+            <span>${item.fileSize}</span>
+            <span>•</span>
+            <span>${dateStr}</span>
+          </div>
+        </div>
+        <div class="h-actions">
+          <a href="${item.downloadUrl}" class="result-btn primary mini" download>
+            ⬇️ Save
+          </a>
+          <button class="h-delete-btn" onclick="deleteHistoryItem('${item.id}')" title="Delete record">
+            ✕
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
+}
+
+async function deleteHistoryItem(id) {
+  try {
+    const res = await fetch(`${API_BASE}/account/history/${id}`, {
+      method: 'DELETE',
+      headers: getApiHeaders()
+    });
+    if (res.ok) {
+      const el = document.getElementById(`hitem-${id}`);
+      if (el) el.remove();
+      loadHistoryCount();
+      showToast('Record deleted');
+    }
+  } catch (e) {
+    showToast('Failed to delete item', 'error');
+  }
+}
+
+// -------------------------------------------------------------
+// USER AUTH MODAL & PROFILE
+// -------------------------------------------------------------
+function openAuthModal() {
+  const modal = document.getElementById('auth-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  const isGuest = !state.user || state.user.isGuest;
+  document.getElementById('auth-form-view').style.display = isGuest ? 'block' : 'none';
+  document.getElementById('auth-profile-view').style.display = isGuest ? 'none' : 'block';
+
+  if (!isGuest && state.user) {
+    document.getElementById('prof-name').innerText = state.user.name;
+    document.getElementById('prof-email').innerText = state.user.email;
+    document.getElementById('prof-plan').innerText = (state.stats.plan.name).toUpperCase();
+    document.getElementById('prof-used').innerText = `${state.stats.downloadsToday} of ${state.stats.isUnlimited ? '∞' : state.stats.dailyLimit}`;
+    document.getElementById('prof-total').innerText = state.stats.totalDownloads;
+
+    const sub = state.stats.subscription;
+    if (sub && sub.endDate) {
+      document.getElementById('prof-expiry').innerText = new Date(sub.endDate).toLocaleDateString();
+    } else {
+      document.getElementById('prof-expiry').innerText = 'Lifetime (Free)';
+    }
+  }
+}
+
+function closeAuthModal() {
+  const modal = document.getElementById('auth-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function switchAuthTab(tab) {
+  state.authTab = tab;
+  document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+  document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+  document.getElementById('group-name').style.display = tab === 'register' ? 'block' : 'none';
+  document.getElementById('auth-submit-btn').innerText = tab === 'register' ? 'Create Account' : 'Sign In';
+  document.getElementById('auth-modal-title').innerText = tab === 'register' ? 'Create Account' : 'Sign In';
+}
+
+async function handleAuthSubmit(e) {
+  e.preventDefault();
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value.trim();
+  const name = document.getElementById('auth-name').value.trim();
+  const isRegister = state.authTab === 'register';
+
+  try {
+    const endpoint = isRegister ? '/account/register' : '/account/login';
+    const payload = isRegister ? { email, password, name, guestId: state.userId } : { email, password };
+
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Authentication failed');
+
+    state.userId = data.user.id;
+    localStorage.setItem('agy_user_id', data.user.id);
+    state.user = data.user;
+    state.stats = data.stats;
+
+    updateQuotaUI(data.stats);
+    closeAuthModal();
+    loadHistoryCount();
+    showToast(`Welcome ${data.user.name}! Account synced with database.`);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function logoutUser() {
+  localStorage.removeItem('agy_user_id');
+  state.userId = getOrCreateUserId();
+  state.user = null;
+  loadUserAccount();
+  closeAuthModal();
+  showToast('Logged out. Switched to guest mode.');
+}
+
+// -------------------------------------------------------------
+// LIMIT REACHED MODAL
+// -------------------------------------------------------------
+function openLimitModal(message, stats) {
+  const modal = document.getElementById('limit-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  if (document.getElementById('limit-modal-msg') && message) {
+    document.getElementById('limit-modal-msg').innerHTML = message;
+  }
+}
+
+function closeLimitModal() {
+  const modal = document.getElementById('limit-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function openPricingModal() {
+  const pricingSection = document.getElementById('pricing');
+  if (pricingSection) {
+    pricingSection.scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+// -------------------------------------------------------------
+// VIDEO INFO & QUALITY ENGINE
+// -------------------------------------------------------------
+function toggleClearButton(show) {
+  if (elClearBtn) elClearBtn.style.display = show ? 'block' : 'none';
 }
 
 function clearUrlInput() {
@@ -119,7 +609,6 @@ function loadSampleUrl(url) {
   }
 }
 
-// --- Notification Toast ---
 function showToast(message, type = 'info') {
   const toast = document.getElementById('toast');
   if (!toast) return;
@@ -131,7 +620,6 @@ function showToast(message, type = 'info') {
   }, 3500);
 }
 
-// --- Video Info & Quality Engine ---
 async function fetchVideoInfo() {
   const url = elUrlInput ? elUrlInput.value.trim() : '';
   if (!url) {
@@ -147,7 +635,7 @@ async function fetchVideoInfo() {
 
     const res = await fetch(`${API_BASE}/video/info`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders(),
       body: JSON.stringify({ url })
     });
 
@@ -157,7 +645,6 @@ async function fetchVideoInfo() {
     state.videoInfo = data.data;
     state.qualities = data.data.qualities || [];
 
-    // Select default recommended quality (or highest available under 1080p)
     const recommended = state.qualities.find(q => q.isRecommended && q.type === 'video') ||
                         state.qualities.find(q => q.type === 'video') ||
                         state.qualities[0];
@@ -176,9 +663,7 @@ async function fetchVideoInfo() {
       elProcessBtn.style.opacity = '1';
     }
 
-    // Smooth scroll down to preview
     elPreview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
   } catch (err) {
     console.error('Fetch error:', err);
     showToast(err.message || 'Error fetching video streams', 'error');
@@ -210,7 +695,6 @@ function renderVideoPreview(info) {
   elPreview.style.display = 'block';
 }
 
-// --- Quality Sorting & Filtering ---
 function toggleQualitySort() {
   state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
 
@@ -232,11 +716,7 @@ function setQualityFilter(filter) {
   state.filterType = filter;
 
   document.querySelectorAll('.filter-pill').forEach(btn => {
-    if (btn.dataset.filter === filter) {
-      btn.classList.add('active');
-    } else {
-      btn.classList.remove('active');
-    }
+    btn.classList.toggle('active', btn.dataset.filter === filter);
   });
 
   renderQualityCards();
@@ -247,7 +727,6 @@ function renderQualityCards() {
 
   let list = [...state.qualities];
 
-  // Apply Filter
   if (state.filterType === 'hd') {
     list = list.filter(q => q.height >= 720 && q.height <= 4320);
   } else if (state.filterType === 'saver') {
@@ -256,19 +735,13 @@ function renderQualityCards() {
     list = list.filter(q => q.type === 'audio');
   }
 
-  // Apply Sort (Low to High vs High to Low)
   list.sort((a, b) => {
-    // Keep Audio and Auto at bottom or top sensibly
     if (a.type === 'audio') return 1;
     if (b.type === 'audio') return -1;
     if (a.id === 'best') return 1;
     if (b.id === 'best') return -1;
 
-    if (state.sortOrder === 'asc') {
-      return a.height - b.height;
-    } else {
-      return b.height - a.height;
-    }
+    return state.sortOrder === 'asc' ? a.height - b.height : b.height - a.height;
   });
 
   if (list.length === 0) {
@@ -329,14 +802,15 @@ function updateSelectedBanner() {
   if (elSqBtnLabel) elSqBtnLabel.innerText = chosen.label;
 }
 
-// --- Quick Download & Processing ---
+// -------------------------------------------------------------
+// DOWNLOAD PROCESSOR & LIMIT ENFORCEMENT
+// -------------------------------------------------------------
 async function quickDownload() {
   if (!state.videoInfo) {
     showToast('Please fetch video info first', 'error');
     return;
   }
 
-  // Ensure download is active
   state.features.download = true;
   state.features.summary = false;
   state.features.highlights = false;
@@ -368,49 +842,48 @@ async function startProcessing() {
     return;
   }
 
-  const hasFeatures = Object.values(state.features).some(v => v);
-  if (!hasFeatures) {
-    showToast('Please select at least one action or download option', 'error');
-    return;
-  }
-
   triggerDownloadPipeline();
 }
 
 async function triggerDownloadPipeline() {
-  // Switch view to results panel
-  elPanelUrl.style.display = 'none';
-  elPanelFeatures.style.display = 'none';
-  elPanelResults.style.display = 'block';
-  elJobsContainer.innerHTML = '';
-
   const chosenQuality = state.selectedQualityId || '720p';
   const isAudio = chosenQuality === 'audio' || chosenQuality === 'audio-mp3';
 
-  if (document.getElementById('lang-select')) {
-    state.subtitleLang = document.getElementById('lang-select').value;
-  }
-
+  // 1. Pre-check / execute download API
   try {
-    // 1. Download Job
     const dlRes = await fetch(`${API_BASE}/video/download`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders(),
       body: JSON.stringify({
         url: state.videoUrl,
         quality: chosenQuality,
-        title: state.videoInfo.title || 'Video'
+        title: state.videoInfo.title || 'Video',
+        thumbnail: state.videoInfo.thumbnail || ''
       })
     });
 
     const dlData = await dlRes.json();
-    if (!dlRes.ok) throw new Error(dlData.error || 'Failed to start download');
+
+    // Check if daily download limit was reached
+    if (!dlRes.ok) {
+      if (dlData.limitReached) {
+        openLimitModal(dlData.message, dlData.stats);
+        return;
+      }
+      throw new Error(dlData.error || 'Failed to start download');
+    }
+
+    // Switch view to results panel
+    elPanelUrl.style.display = 'none';
+    elPanelFeatures.style.display = 'none';
+    elPanelResults.style.display = 'block';
+    elJobsContainer.innerHTML = '';
 
     const rootJobId = dlData.jobId;
     createJobCard(rootJobId, 'download', isAudio ? '🎵 MP3 Audio Download' : `🎥 Video Download (${chosenQuality})`);
     pollJob(rootJobId);
 
-    // 2. Optional AI Suite Jobs
+    // AI Jobs if enabled
     if (state.features.summary) {
       const res = await startAiJob('/ai/summarize', {
         jobId: rootJobId,
@@ -429,25 +902,26 @@ async function triggerDownloadPipeline() {
     if (state.features.subtitles) {
       const res = await startAiJob('/ai/subtitles', {
         jobId: rootJobId,
-        language: state.subtitleLang
+        language: document.getElementById('lang-select')?.value || 'en'
       });
-      createJobCard(res.jobId, 'subtitles', `💬 Auto Subtitles (${state.subtitleLang.toUpperCase()})`);
+      createJobCard(res.jobId, 'subtitles', `💬 Auto Subtitles`);
       pollJob(res.jobId);
     }
 
-    // Scroll to results
+    // Update account quota in background
+    loadUserAccount();
+    loadHistoryCount();
     elPanelResults.scrollIntoView({ behavior: 'smooth' });
 
   } catch (err) {
     showToast(err.message, 'error');
-    resetTool();
   }
 }
 
 async function startAiJob(endpoint, payload) {
   const res = await fetch(API_BASE + endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getApiHeaders(),
     body: JSON.stringify(payload)
   });
   const data = await res.json();
@@ -455,7 +929,9 @@ async function startAiJob(endpoint, payload) {
   return data;
 }
 
-// --- Job Polling & UI ---
+// -------------------------------------------------------------
+// REAL-TIME JOB MONITORING & MEDIA PREVIEW
+// -------------------------------------------------------------
 function createJobCard(jobId, type, title) {
   const html = `
     <div class="job-card" id="job-${jobId}">
@@ -505,6 +981,8 @@ function pollJob(jobId) {
       if (job.status === 'completed' || job.status === 'error') {
         clearInterval(interval);
         state.activeJobs.delete(jobId);
+        loadUserAccount();
+        loadHistoryCount();
       }
     } catch (err) {
       console.error('Poll error:', err);
@@ -602,7 +1080,7 @@ function renderJobResult(type, result, container) {
             📋 Copy Direct Link
           </button>
           <button class="result-btn ghost" onclick="resetTool()">
-            🔄 Download Another Quality
+            🔄 Download Another Video
           </button>
         </div>
       </div>
@@ -683,10 +1161,12 @@ function resetTool() {
   elPanelFeatures.style.display = 'block';
 
   elPanelUrl.scrollIntoView({ behavior: 'smooth' });
-  showToast('Ready for another video or quality!');
+  showToast('Ready for next download!');
 }
 
-// --- Theme Switcher ---
+// -------------------------------------------------------------
+// THEME SWITCHER & RATING SYSTEM
+// -------------------------------------------------------------
 function initTheme() {
   const savedTheme = localStorage.getItem('theme') || 'dark';
   setTheme(savedTheme);
@@ -704,15 +1184,10 @@ function setTheme(theme) {
   localStorage.setItem('theme', theme);
 
   document.querySelectorAll('.theme-btn').forEach(btn => {
-    if (btn.dataset.setTheme === theme) {
-      btn.classList.add('active');
-    } else {
-      btn.classList.remove('active');
-    }
+    btn.classList.toggle('active', btn.dataset.setTheme === theme);
   });
 }
 
-// --- Rating System ---
 function initRating() {
   const stars = document.querySelectorAll('.star');
   const ratingMsg = document.getElementById('rating-msg');

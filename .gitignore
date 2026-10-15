@@ -5,3 +5,5 @@ uploads/
 
 .vercel
 .env*.local
+data/*.json
+data/*.tmp*

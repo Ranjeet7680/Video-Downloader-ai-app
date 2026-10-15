@@ -57,11 +57,23 @@ router.post(['/summarize', '/summary'], async (req, res) => {
     };
 
     jobStore.set(newJobId, job);
+    const isVercel = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+    if (isVercel) {
+      await simulateSummary(newJobId, transcript, videoTitle);
+      return res.json({
+        success: true,
+        jobId: newJobId,
+        job: jobStore.get(newJobId) || job,
+        message: '🧠 AI Summary generated!'
+      });
+    }
+
     simulateSummary(newJobId, transcript, videoTitle);
 
     res.json({
       success: true,
       jobId: newJobId,
+      job,
       message: '🧠 AI Summary generation started!'
     });
 
@@ -88,11 +100,23 @@ router.post('/highlights', async (req, res) => {
     };
 
     jobStore.set(newJobId, job);
+    const isVercel = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+    if (isVercel) {
+      await simulateHighlights(newJobId, duration);
+      return res.json({
+        success: true,
+        jobId: newJobId,
+        job: jobStore.get(newJobId) || job,
+        message: '✂️ Highlights extracted!'
+      });
+    }
+
     simulateHighlights(newJobId, duration);
 
     res.json({
       success: true,
       jobId: newJobId,
+      job,
       message: '✂️ Highlight detection started!'
     });
 
@@ -120,11 +144,23 @@ router.post('/subtitles', async (req, res) => {
     };
 
     jobStore.set(newJobId, job);
+    const isVercel = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+    if (isVercel) {
+      await simulateSubtitles(newJobId, language);
+      return res.json({
+        success: true,
+        jobId: newJobId,
+        job: jobStore.get(newJobId) || job,
+        message: '💬 Subtitles ready!'
+      });
+    }
+
     simulateSubtitles(newJobId, language);
 
     res.json({
       success: true,
       jobId: newJobId,
+      job,
       message: '💬 Subtitle generation started!'
     });
 
@@ -172,8 +208,9 @@ async function simulateSummary(jobId, transcript, videoTitle) {
     { progress: 100, step: '✅ Summary ready!', delay: 500 },
   ];
 
+  const isVercel = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
   for (const { progress, step, delay } of steps) {
-    await sleep(delay);
+    if (!isVercel) await sleep(delay);
     const job = jobStore.get(jobId);
     if (!job) break;
 
@@ -210,8 +247,9 @@ async function simulateHighlights(jobId, duration) {
     { progress: 100, step: '✅ Highlights extracted!', delay: 500 },
   ];
 
+  const isVercel = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
   for (const { progress, step, delay } of steps) {
-    await sleep(delay);
+    if (!isVercel) await sleep(delay);
     const job = jobStore.get(jobId);
     if (!job) break;
 
@@ -244,8 +282,9 @@ async function simulateSubtitles(jobId, language) {
     { progress: 100, step: '✅ Subtitles ready!', delay: 500 },
   ];
 
+  const isVercel = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
   for (const { progress, step, delay } of steps) {
-    await sleep(delay);
+    if (!isVercel) await sleep(delay);
     const job = jobStore.get(jobId);
     if (!job) break;
 

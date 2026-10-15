@@ -25,12 +25,14 @@ const DEFAULT_PLANS = [
     dailyLimit: 3,
     maxQuality: '720p',
     maxHeight: 720,
+    hasWatermark: true,
     speedMultiplier: 1,
     isPopular: false,
     description: 'Perfect for casual downloads and quick previews',
     features: [
       '3 Video Downloads / Day',
       'Up to 720p HD Video Quality',
+      '💧 Subtle Video Watermark',
       'Basic AI Summaries',
       'Standard Download Speed',
       'Community Support'
@@ -47,11 +49,13 @@ const DEFAULT_PLANS = [
     dailyLimit: 50,
     maxQuality: '1080p',
     maxHeight: 1080,
+    hasWatermark: false,
     speedMultiplier: 3,
     isPopular: true,
     description: 'Ideal for content creators, students, and regular downloaders',
     features: [
       '50 Video Downloads / Day',
+      '✨ 100% Watermark-Free (Clean Videos)',
       '1080p Full HD Video Quality',
       'High-Bitrate 320kbps MP3 Audio',
       'Full AI Auto Summaries & Key Points',
@@ -71,11 +75,13 @@ const DEFAULT_PLANS = [
     dailyLimit: 999999, // Unlimited
     maxQuality: '4K',
     maxHeight: 4320,
+    hasWatermark: false,
     speedMultiplier: 10,
     isPopular: false,
     description: 'Ultimate power: zero limits, 4K cinema quality, and all AI features',
     features: [
       'Unlimited Video Downloads (∞ / Day)',
+      '✨ 100% Watermark-Free (Crystal Clean)',
       '4K Ultra HD & 2K QHD Quality',
       'All Video & Audio Formats (MP4/MP3)',
       'Full AI Suite: Summaries, Reels, Subs',
@@ -120,7 +126,7 @@ function loadDb() {
   if (!dbData.users) dbData.users = [];
   if (!dbData.subscriptions) dbData.subscriptions = [];
   if (!dbData.downloads) dbData.downloads = [];
-  if (!dbData.plans || dbData.plans.length === 0) dbData.plans = DEFAULT_PLANS;
+  dbData.plans = DEFAULT_PLANS;
   if (!dbData.jobs) dbData.jobs = {};
 
   return dbData;

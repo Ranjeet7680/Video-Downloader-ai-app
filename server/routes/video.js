@@ -6,6 +6,7 @@ const fs = require('fs');
 const fsExtra = require('fs-extra');
 const axios = require('axios');
 const ytDlp = require('yt-dlp-exec');
+const { spawnSync } = require('child_process');
 const jobStore = require('../utils/jobStore');
 const db = require('../utils/db');
 
@@ -596,7 +597,51 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
       const matchedFile = files.find(f => f.startsWith(baseFilename));
 
       if (matchedFile) {
-        const fullPath = path.join(UPLOADS_DIR, matchedFile);
+        let fullPath = path.join(UPLOADS_DIR, matchedFile);
+
+        // Check user plan to determine if watermark is required
+        const userStats = db.getUserStats(userId);
+        const isFreeUser = userStats.plan.id === 'free';
+        let isWatermarked = false;
+
+        // Apply watermark for Free users on video downloads
+        if (isFreeUser && !isAudio && ffmpegPath) {
+          try {
+            job.currentStep = '💧 Applying VideoDownloader AI watermark (Free Plan)...';
+            job.progress = 96;
+            jobStore.set(jobId, job);
+
+            const parsed = path.parse(fullPath);
+            const tempWatermarkedPath = path.join(parsed.dir, `wm_${parsed.name}${parsed.ext}`);
+            const watermarkText = 'VideoDownloader AI';
+
+            const wmArgs = [
+              '-y',
+              '-i', fullPath,
+              '-vf', `drawtext=text='${watermarkText}':x=w-tw-20:y=h-th-20:fontsize=20:fontcolor=white@0.9:box=1:boxcolor=black@0.5:boxborderw=6`,
+              '-c:v', 'libx264',
+              '-preset', 'veryfast',
+              '-crf', '22',
+              '-c:a', 'copy',
+              tempWatermarkedPath
+            ];
+
+            const wmResult = spawnSync(ffmpegPath, wmArgs);
+            if (wmResult.status === 0 && fs.existsSync(tempWatermarkedPath)) {
+              try { fs.unlinkSync(fullPath); } catch (e) {}
+              fs.renameSync(tempWatermarkedPath, fullPath);
+              isWatermarked = true;
+            } else {
+              console.warn('Watermark overlay exited with non-zero or missing output:', wmResult.status);
+              if (fs.existsSync(tempWatermarkedPath)) {
+                try { fs.unlinkSync(tempWatermarkedPath); } catch (e) {}
+              }
+            }
+          } catch (wmErr) {
+            console.error('Watermark application error:', wmErr.message);
+          }
+        }
+
         const stats = fs.statSync(fullPath);
         const sizeMB = (stats.size / (1024 * 1024)).toFixed(2) + ' MB';
         const finalExt = path.extname(matchedFile).replace('.', '') || (isAudio ? 'mp3' : 'mp4');
@@ -613,7 +658,10 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
           isAudio: isAudio,
           ext: finalExt,
           path: `/uploads/${matchedFile}`,
-          downloadUrl: `/api/video/file/${matchedFile}?name=${encodeURIComponent(userDownloadName)}`
+          downloadUrl: `/api/video/file/${matchedFile}?name=${encodeURIComponent(userDownloadName)}`,
+          watermarked: isWatermarked,
+          planId: userStats.plan.id,
+          planName: userStats.plan.name
         };
         jobStore.set(jobId, job);
 
@@ -627,7 +675,8 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
             format: finalExt,
             fileSize: sizeMB,
             filename: matchedFile,
-            downloadUrl: `/api/video/file/${matchedFile}?name=${encodeURIComponent(userDownloadName)}`
+            downloadUrl: `/api/video/file/${matchedFile}?name=${encodeURIComponent(userDownloadName)}`,
+            watermarked: isWatermarked
           });
         } catch (dbErr) {
           console.error('Failed to record download in DB:', dbErr.message);
@@ -641,6 +690,9 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
       console.warn('yt-dlp execution failed, falling back to simulated output:', ytError.message);
 
       // Simulation / Vercel fallback for demo
+      const userStats = db.getUserStats(userId);
+      const isFreeUser = userStats.plan.id === 'free';
+      const fallbackWatermarked = isFreeUser && !isAudio;
       const fallbackExt = isAudio ? 'mp3' : 'mp4';
       const fallbackUrl = isAudio
         ? 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
@@ -658,7 +710,10 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
         isAudio: isAudio,
         ext: fallbackExt,
         path: fallbackUrl,
-        downloadUrl: fallbackUrl
+        downloadUrl: fallbackUrl,
+        watermarked: fallbackWatermarked,
+        planId: userStats.plan.id,
+        planName: userStats.plan.name
       };
       jobStore.set(jobId, job);
 
@@ -671,7 +726,8 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
           format: fallbackExt,
           fileSize: isAudio ? '3.8 MB' : '15.4 MB',
           filename: fallbackName,
-          downloadUrl: fallbackUrl
+          downloadUrl: fallbackUrl,
+          watermarked: fallbackWatermarked
         });
       } catch (e) {}
     }

@@ -757,6 +757,12 @@ function renderQualityCards() {
     const isSelected = q.id === state.selectedQualityId;
     const tagClass = `badge-${(q.tag || 'std').toLowerCase()}`;
     const isAudio = q.type === 'audio';
+    const isFree = !state.stats || !state.stats.plan || state.stats.plan.id === 'free';
+    const watermarkBadge = isAudio
+      ? `<span class="qc-watermark-pill clean" title="Pure Clean Audio">🎵 MP3 Audio</span>`
+      : isFree
+        ? `<span class="qc-watermark-pill" title="Watermarked on Free Starter">💧 Watermark</span>`
+        : `<span class="qc-watermark-pill clean" title="100% Watermark Free">✨ No Watermark</span>`;
 
     return `
       <div class="quality-card ${isSelected ? 'active' : ''} ${isAudio ? 'card-audio' : ''}"
@@ -769,6 +775,7 @@ function renderQualityCards() {
         <div class="qc-desc">${q.desc || ''}</div>
         <div class="qc-footer">
           <span class="qc-format-pill">${(q.ext || 'mp4').toUpperCase()}</span>
+          ${watermarkBadge}
           ${q.fps && q.fps > 30 ? `<span class="qc-fps-pill">${q.fps} FPS</span>` : ''}
           <div class="qc-radio ${isSelected ? 'checked' : ''}">
             ${isSelected ? '✓' : ''}
@@ -1040,6 +1047,17 @@ function renderJobResult(type, result, container) {
 
   if (type === 'download') {
     const isAudio = result.isAudio || result.ext === 'mp3';
+    const isWatermarked = !!result.watermarked;
+    const watermarkNoticeHtml = !isAudio ? (
+      isWatermarked
+        ? `<div class="watermark-notice-badge">
+             <span>💧 <strong>VideoDownloader AI</strong> watermark applied (Free Plan). <a href="#pricing-section" onclick="openPricingModal()">Upgrade to Pro</a> for 100% clean watermark-free downloads!</span>
+           </div>`
+        : `<div class="watermark-clean-badge">
+             <span>✨ <strong>100% Watermark-Free Video</strong> (${result.planName || state.stats?.plan?.name || 'Pro'} Member)</span>
+           </div>`
+    ) : '';
+
     html = `
       <div class="result-media-card">
         <div class="media-preview-box">
@@ -1070,7 +1088,15 @@ function renderJobResult(type, result, container) {
             <span class="spec-label">Format</span>
             <span class="spec-val">${(result.ext || 'mp4').toUpperCase()}</span>
           </div>
+          ${!isAudio ? `
+          <div class="spec-pill">
+            <span class="spec-label">Watermark</span>
+            <span class="spec-val" style="color:${isWatermarked ? '#f59e0b' : '#10b981'}; font-size:0.85rem;">${isWatermarked ? '💧 Included' : '✨ Clean (None)'}</span>
+          </div>
+          ` : ''}
         </div>
+
+        ${watermarkNoticeHtml}
 
         <div class="result-actions-row">
           <a href="${result.downloadUrl}" download="${result.filename}" class="result-btn primary big-btn">

@@ -621,11 +621,14 @@ function loadSampleUrl(url) {
 function showToast(message, type = 'info') {
   const toast = document.getElementById('toast');
   if (!toast) return;
-  toast.innerHTML = type === 'error' ? `❌ ${message}` : `✅ ${message}`;
+  const isErr = type === 'error';
+  const icon = isErr ? '❌' : '✅';
+  toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-message">${message}</span>`;
   toast.className = `toast show ${type}`;
 
-  setTimeout(() => {
-    toast.className = 'toast';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => {
+    toast.classList.remove('show');
   }, 3500);
 }
 

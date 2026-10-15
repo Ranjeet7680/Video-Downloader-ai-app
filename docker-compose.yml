@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  video-downloader-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: video-downloader-ai
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+    volumes:
+      # Persistent download history, users, and subscription database
+      - ./data:/app/data
+      # Downloaded videos and cached media files
+      - ./uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

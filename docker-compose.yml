@@ -9,9 +9,17 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
       - PORT=3000
       - NODE_ENV=production
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+      - META_API_KEY=${META_API_KEY:-}
+      - META_ACCESS_TOKEN=${META_ACCESS_TOKEN:-}
+      - META_APP_ID=${META_APP_ID:-}
+      - META_APP_SECRET=${META_APP_SECRET:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
       # Persistent download history, users, and subscription database
       - ./data:/app/data

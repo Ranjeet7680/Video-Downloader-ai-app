@@ -256,8 +256,42 @@ function buildQualitiesList(formats = [], duration = 0) {
   return list;
 }
 
+// Helper: decode HTML entities in metadata strings
+function decodeHtmlEntities(str) {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+      try { return String.fromCodePoint(parseInt(hex, 16)); } catch (e) { return ''; }
+    })
+    .replace(/&#(\d+);/g, (_, dec) => {
+      try { return String.fromCodePoint(parseInt(dec, 10)); } catch (e) { return ''; }
+    })
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .trim();
+}
+
+// Helper: resolve Meta Graph API Access Token
+function getMetaAccessToken() {
+  if (process.env.META_API_KEY && process.env.META_API_KEY.trim()) {
+    return process.env.META_API_KEY.trim();
+  }
+  if (process.env.META_ACCESS_TOKEN && process.env.META_ACCESS_TOKEN.trim()) {
+    return process.env.META_ACCESS_TOKEN.trim();
+  }
+  if (process.env.META_APP_ID && process.env.META_APP_SECRET) {
+    return `${process.env.META_APP_ID.trim()}|${process.env.META_APP_SECRET.trim()}`;
+  }
+  return null;
+}
+
 // Universal Real Metadata Scraper & oEmbed Resolver
-// Extracts actual video title, author, thumbnail, and duration without requiring API keys
+// Extracts actual video title, author, thumbnail, and duration with API support + resilient scraping
 async function fetchRealMetadataFallback(url, platform) {
   let title = null;
   let thumbnail = null;
@@ -269,24 +303,90 @@ async function fetchRealMetadataFallback(url, platform) {
 
   const ytId = extractYouTubeId(url);
 
-  // 1. YouTube oEmbed & High-Res Thumbnails
+  // 1. YouTube Data API v3 & oEmbed & High-Res Thumbnails
   if (ytId) {
     thumbnail = `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`;
-    try {
-      const oembedRes = await axios.get(
-        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${ytId}&format=json`,
-        { timeout: 4500 }
-      );
-      if (oembedRes.data && oembedRes.data.title) {
-        title = oembedRes.data.title;
-        channel = oembedRes.data.author_name;
+    const ytApiKey = process.env.YOUTUBE_API_KEY;
+
+    // Try YouTube Data API v3 if key exists
+    if (ytApiKey) {
+      try {
+        const ytRes = await axios.get(
+          `https://www.googleapis.com/youtube/v3/videos?id=${ytId}&key=${ytApiKey}&part=snippet,contentDetails,statistics`,
+          { timeout: 4500 }
+        );
+        if (ytRes.data.items && ytRes.data.items.length > 0) {
+          const item = ytRes.data.items[0];
+          title = decodeHtmlEntities(item.snippet.title);
+          channel = item.snippet.channelTitle;
+          thumbnail = item.snippet.thumbnails.maxres?.url || item.snippet.thumbnails.high?.url || thumbnail;
+          if (item.contentDetails?.duration) {
+            durationSeconds = parseIsoDuration(item.contentDetails.duration);
+            duration = formatDuration(durationSeconds);
+          }
+          if (item.statistics?.viewCount) {
+            views = formatNumber(item.statistics.viewCount) + ' views';
+          }
+          if (item.snippet?.publishedAt) {
+            uploadDate = item.snippet.publishedAt.split('T')[0];
+          }
+        }
+      } catch (ytApiErr) {
+        const errMsg = ytApiErr.response?.data?.error?.message || ytApiErr.message;
+        console.warn(`YouTube Data API warning (${errMsg}). Falling back to YouTube oEmbed.`);
       }
-    } catch (e) {
-      console.warn('YouTube oEmbed fetch error:', e.message);
+    }
+
+    // Fallback: YouTube public oEmbed
+    if (!title) {
+      try {
+        const oembedRes = await axios.get(
+          `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${ytId}&format=json`,
+          { timeout: 4500 }
+        );
+        if (oembedRes.data && oembedRes.data.title) {
+          title = decodeHtmlEntities(oembedRes.data.title);
+          channel = oembedRes.data.author_name;
+        }
+      } catch (e) {
+        console.warn('YouTube oEmbed fetch error:', e.message);
+      }
     }
   }
 
-  // 2. TikTok oEmbed
+  // 2. Meta (Instagram & Facebook) Graph API Integration
+  const metaToken = getMetaAccessToken();
+  const isInstagram = platform === 'Instagram' || url.includes('instagram.com');
+  const isFacebook = platform === 'Facebook' || url.includes('facebook.com') || url.includes('fb.watch') || url.includes('fb.me');
+
+  if (!title && metaToken && (isInstagram || isFacebook)) {
+    try {
+      const endpoints = isInstagram
+        ? [`https://graph.facebook.com/v19.0/instagram_oembed?url=${encodeURIComponent(url)}&access_token=${metaToken}`]
+        : [
+            `https://graph.facebook.com/v19.0/oembed_video?url=${encodeURIComponent(url)}&access_token=${metaToken}`,
+            `https://graph.facebook.com/v19.0/oembed_post?url=${encodeURIComponent(url)}&access_token=${metaToken}`
+          ];
+
+      for (const ep of endpoints) {
+        try {
+          const metaRes = await axios.get(ep, { timeout: 4500 });
+          if (metaRes.data && (metaRes.data.title || metaRes.data.author_name)) {
+            if (metaRes.data.title) title = decodeHtmlEntities(metaRes.data.title);
+            if (metaRes.data.author_name) channel = isInstagram ? `@${metaRes.data.author_name}` : decodeHtmlEntities(metaRes.data.author_name);
+            if (metaRes.data.thumbnail_url) thumbnail = metaRes.data.thumbnail_url;
+            break;
+          }
+        } catch (innerErr) {
+          // Continue to next endpoint or fallback
+        }
+      }
+    } catch (metaErr) {
+      console.warn('Meta Graph API warning:', metaErr.response?.data?.error?.message || metaErr.message);
+    }
+  }
+
+  // 3. TikTok oEmbed
   if (!title && url.includes('tiktok.com')) {
     try {
       const oembedRes = await axios.get(
@@ -294,14 +394,14 @@ async function fetchRealMetadataFallback(url, platform) {
         { timeout: 4500 }
       );
       if (oembedRes.data && oembedRes.data.title) {
-        title = oembedRes.data.title;
+        title = decodeHtmlEntities(oembedRes.data.title);
         channel = oembedRes.data.author_name || '@tiktok_creator';
         if (oembedRes.data.thumbnail_url) thumbnail = oembedRes.data.thumbnail_url;
       }
     } catch (e) {}
   }
 
-  // 3. Vimeo oEmbed
+  // 4. Vimeo oEmbed
   if (!title && url.includes('vimeo.com')) {
     try {
       const oembedRes = await axios.get(
@@ -309,7 +409,7 @@ async function fetchRealMetadataFallback(url, platform) {
         { timeout: 4500 }
       );
       if (oembedRes.data && oembedRes.data.title) {
-        title = oembedRes.data.title;
+        title = decodeHtmlEntities(oembedRes.data.title);
         channel = oembedRes.data.author_name;
         if (oembedRes.data.thumbnail_url) thumbnail = oembedRes.data.thumbnail_url;
         if (oembedRes.data.duration) {
@@ -320,7 +420,7 @@ async function fetchRealMetadataFallback(url, platform) {
     } catch (e) {}
   }
 
-  // 4. Universal NoEmbed API
+  // 5. Universal NoEmbed API
   if (!title) {
     try {
       const noembedRes = await axios.get(
@@ -328,15 +428,15 @@ async function fetchRealMetadataFallback(url, platform) {
         { timeout: 4500 }
       );
       if (noembedRes.data && noembedRes.data.title) {
-        title = noembedRes.data.title;
+        title = decodeHtmlEntities(noembedRes.data.title);
         if (noembedRes.data.author_name) channel = noembedRes.data.author_name;
         if (noembedRes.data.thumbnail_url) thumbnail = noembedRes.data.thumbnail_url;
       }
     } catch (e) {}
   }
 
-  // 5. OpenGraph & HTML Meta Scraper
-  if (!title) {
+  // 6. OpenGraph & HTML Meta Scraper
+  if (!title || !thumbnail) {
     try {
       const htmlRes = await axios.get(url, {
         headers: {
@@ -348,15 +448,22 @@ async function fetchRealMetadataFallback(url, platform) {
       });
       const html = typeof htmlRes.data === 'string' ? htmlRes.data : '';
       const ogTitle = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) ||
+                      html.match(/<meta\s+name=["']twitter:title["']\s+content=["']([^"']+)["']/i) ||
                       html.match(/<meta\s+name=["']title["']\s+content=["']([^"']+)["']/i) ||
                       html.match(/<title>([^<]+)<\/title>/i);
-      const ogImg = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+      const ogImg = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i) ||
+                    html.match(/<meta\s+name=["']twitter:image["']\s+content=["']([^"']+)["']/i);
+      const ogAuthor = html.match(/<meta\s+property=["']og:site_name["']\s+content=["']([^"']+)["']/i) ||
+                       html.match(/<meta\s+name=["']author["']\s+content=["']([^"']+)["']/i);
       
-      if (ogTitle && ogTitle[1]) {
-        title = ogTitle[1].replace(/ - YouTube$/, '').replace(/ \| Facebook$/, '').replace(/ • Instagram photos and videos$/, '').trim();
+      if (!title && ogTitle && ogTitle[1]) {
+        title = decodeHtmlEntities(ogTitle[1].replace(/ - YouTube$/, '').replace(/ \| Facebook$/, '').replace(/ • Instagram photos and videos$/, '').trim());
       }
-      if (ogImg && ogImg[1]) {
-        thumbnail = ogImg[1];
+      if (!thumbnail && ogImg && ogImg[1]) {
+        thumbnail = decodeHtmlEntities(ogImg[1]);
+      }
+      if (!channel && ogAuthor && ogAuthor[1]) {
+        channel = decodeHtmlEntities(ogAuthor[1]);
       }
     } catch (e) {}
   }
@@ -397,13 +504,13 @@ router.post('/info', async (req, res) => {
         );
         if (ytRes.data.items && ytRes.data.items.length > 0) {
           const item = ytRes.data.items[0];
-          const durationSec = parseIsoDuration(item.contentDetails.duration);
+          const durationSec = parseIsoDuration(item.contentDetails?.duration);
           const qualities = buildQualitiesList([], durationSec);
 
           return res.json({
             success: true,
             data: {
-              title: item.snippet.title,
+              title: decodeHtmlEntities(item.snippet.title),
               thumbnail:
                 item.snippet.thumbnails.maxres?.url ||
                 item.snippet.thumbnails.high?.url ||
@@ -411,15 +518,57 @@ router.post('/info', async (req, res) => {
               duration: formatDuration(durationSec),
               durationSeconds: durationSec,
               channel: item.snippet.channelTitle,
-              views: item.statistics.viewCount ? formatNumber(item.statistics.viewCount) + ' views' : 'N/A',
-              uploadDate: item.snippet.publishedAt ? item.snippet.publishedAt.split('T')[0] : 'Unknown',
+              views: item.statistics?.viewCount ? formatNumber(item.statistics.viewCount) + ' views' : 'N/A',
+              uploadDate: item.snippet?.publishedAt ? item.snippet.publishedAt.split('T')[0] : 'Unknown',
               qualities: qualities,
               platform: 'YouTube'
             }
           });
         }
       } catch (ytApiError) {
-        console.warn('YouTube API call failed, falling back:', ytApiError.message);
+        const errMsg = ytApiError.response?.data?.error?.message || ytApiError.message;
+        console.warn(`YouTube Data API error (${errMsg}). Falling back smoothly to yt-dlp & oEmbed.`);
+      }
+    }
+
+    // Fast path: Meta Graph API for Instagram & Facebook if token configured
+    const metaToken = getMetaAccessToken();
+    if (metaToken && (platform === 'Instagram' || platform === 'Facebook')) {
+      try {
+        const isIg = platform === 'Instagram';
+        const endpoints = isIg
+          ? [`https://graph.facebook.com/v19.0/instagram_oembed?url=${encodeURIComponent(url)}&access_token=${metaToken}`]
+          : [
+              `https://graph.facebook.com/v19.0/oembed_video?url=${encodeURIComponent(url)}&access_token=${metaToken}`,
+              `https://graph.facebook.com/v19.0/oembed_post?url=${encodeURIComponent(url)}&access_token=${metaToken}`
+            ];
+
+        for (const ep of endpoints) {
+          try {
+            const metaRes = await axios.get(ep, { timeout: 4500 });
+            if (metaRes.data && (metaRes.data.title || metaRes.data.author_name)) {
+              const qualities = buildQualitiesList([], 60);
+              return res.json({
+                success: true,
+                data: {
+                  title: decodeHtmlEntities(metaRes.data.title) || `${platform} Reel`,
+                  thumbnail: metaRes.data.thumbnail_url || getPlatformPlaceholder(platform),
+                  duration: '0:45',
+                  durationSeconds: 45,
+                  channel: metaRes.data.author_name ? (isIg ? `@${metaRes.data.author_name}` : decodeHtmlEntities(metaRes.data.author_name)) : `@${platform.toLowerCase()}_creator`,
+                  views: '🔥 Meta Reel',
+                  uploadDate: new Date().toISOString().split('T')[0],
+                  qualities,
+                  platform
+                }
+              });
+            }
+          } catch (innerErr) {
+            // continue
+          }
+        }
+      } catch (metaErr) {
+        console.warn('Meta Graph API error:', metaErr.message);
       }
     }
 

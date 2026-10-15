@@ -14,7 +14,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=2.2" />
 </head>
 
 <body>
@@ -28,27 +28,30 @@
   <!-- Header -->
   <header class="header" id="header">
     <div class="header-inner">
-      <div class="logo">
+      <a href="#hero" class="logo" title="VideoDownloader AI — Home">
         <div class="logo-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2"
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2.2"
               stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </div>
-        <span class="logo-text">Video<span class="logo-accent">Downloader AI</span></span>
-      </div>
+        <span class="logo-text">Video<span class="logo-accent">Downloader</span><span class="logo-ai-badge">AI</span></span>
+      </a>
 
-      <nav class="nav">
-        <a href="#tool" class="nav-link">Download</a>
-        <a href="#pricing" class="nav-link">Pricing & Plans</a>
-        <a href="#quality-guide" class="nav-link">Quality Guide</a>
-        <a href="#features" class="nav-link">Features</a>
+      <!-- Desktop Navigation -->
+      <nav class="nav" id="main-nav">
+        <a href="#tool" class="nav-link"><span>Download</span></a>
+        <a href="#pricing" class="nav-link"><span>Pricing &amp; Plans</span></a>
+        <a href="#quality-guide" class="nav-link"><span>Quality Guide</span></a>
+        <a href="#features" class="nav-link"><span>Features</span></a>
       </nav>
 
+      <!-- Header Controls -->
       <div class="header-controls">
         <!-- Records / History Button -->
         <button class="nav-btn records-btn" onclick="openHistoryModal()" title="View Download Records">
-          <span>📋 Records</span>
+          <span class="btn-icon">📋</span>
+          <span class="records-text">Records</span>
           <span class="badge-count" id="header-history-count">0</span>
         </button>
 
@@ -60,13 +63,65 @@
         </div>
 
         <!-- User Profile / Auth Button -->
-        <button class="user-btn" id="header-user-btn" onclick="openAuthModal()">
-          <span id="user-btn-icon">👤</span>
-          <span id="user-btn-text">Account</span>
+        <button class="user-btn" id="header-user-btn" onclick="openAuthModal()" title="Manage Account & Subscription">
+          <span id="user-btn-icon" class="btn-icon">👤</span>
+          <span id="user-btn-text" class="user-text">Account</span>
         </button>
 
         <!-- Theme Switcher -->
         <div class="theme-switcher">
+          <button class="theme-btn active" data-set-theme="dark" title="Night Mode">🌙</button>
+          <button class="theme-btn" data-set-theme="light" title="Day Mode">☀️</button>
+          <button class="theme-btn" data-set-theme="pink" title="Pink Mode">🌸</button>
+        </div>
+
+        <!-- Mobile Menu Toggle Button -->
+        <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Toggle navigation menu" onclick="toggleMobileNav()">
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile Navigation Drawer -->
+    <div class="mobile-drawer" id="mobile-drawer">
+      <div class="mobile-drawer-user-row">
+        <!-- Records in mobile drawer -->
+        <button class="mobile-drawer-btn" onclick="openHistoryModal(); toggleMobileNav(false);" title="View Download Records">
+          <span>📋 Records</span>
+          <span class="badge-count" id="drawer-history-count">0</span>
+        </button>
+        <!-- Account in mobile drawer -->
+        <button class="mobile-drawer-btn" onclick="openAuthModal(); toggleMobileNav(false);" title="Manage Account &amp; Subscription">
+          <span id="drawer-user-icon">👤</span>
+          <span id="drawer-user-text">Account</span>
+        </button>
+      </div>
+
+      <nav class="mobile-nav-links">
+        <a href="#tool" class="mobile-nav-item" onclick="toggleMobileNav(false)">
+          <span class="item-icon">⚡</span>
+          <span class="item-title">Video Downloader</span>
+        </a>
+        <a href="#pricing" class="mobile-nav-item" onclick="toggleMobileNav(false)">
+          <span class="item-icon">💳</span>
+          <span class="item-title">Pricing &amp; Plans</span>
+        </a>
+        <a href="#quality-guide" class="mobile-nav-item" onclick="toggleMobileNav(false)">
+          <span class="item-icon">🎚️</span>
+          <span class="item-title">Quality Guide (144p to 4K)</span>
+        </a>
+        <a href="#features" class="mobile-nav-item" onclick="toggleMobileNav(false)">
+          <span class="item-icon">✨</span>
+          <span class="item-title">AI Highlights &amp; Features</span>
+        </a>
+      </nav>
+
+      <!-- Theme Switcher in mobile drawer -->
+      <div class="mobile-drawer-theme-row">
+        <span class="mobile-theme-label">Theme Mode:</span>
+        <div class="drawer-theme-switcher">
           <button class="theme-btn active" data-set-theme="dark" title="Night Mode">🌙</button>
           <button class="theme-btn" data-set-theme="light" title="Day Mode">☀️</button>
           <button class="theme-btn" data-set-theme="pink" title="Pink Mode">🌸</button>
@@ -744,7 +799,7 @@
   <!-- Notification Toast -->
   <div class="toast" id="toast"></div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2.2"></script>
 </body>
 
 </html>

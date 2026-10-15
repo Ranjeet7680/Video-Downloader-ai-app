@@ -75,6 +75,8 @@ const elHeaderPlanQuota = document.getElementById('header-plan-quota');
 const elHeaderUserBtn = document.getElementById('header-user-btn');
 const elUserBtnText = document.getElementById('user-btn-text');
 const elHeaderHistoryCount = document.getElementById('header-history-count');
+const elDrawerHistoryCount = document.getElementById('drawer-history-count');
+const elDrawerUserText = document.getElementById('drawer-user-text');
 const elQuotaPlanBadge = document.getElementById('quota-plan-badge');
 const elQuotaProgressFill = document.getElementById('quota-progress-fill');
 const elQuotaUsageText = document.getElementById('quota-usage-text');
@@ -155,7 +157,9 @@ function updateQuotaUI(stats) {
     elHeaderPlanQuota.innerText = isUnlimited ? '(∞ Unlimited)' : `(${remaining} left)`;
   }
   if (elUserBtnText) {
-    elUserBtnText.innerText = isGuest ? 'Account' : stats.user.name.split(' ')[0];
+    const label = isGuest ? 'Account' : stats.user.name.split(' ')[0];
+    elUserBtnText.innerText = label;
+    if (elDrawerUserText) elDrawerUserText.innerText = label;
   }
 
   // 2. Quota Card in Step 1
@@ -340,8 +344,10 @@ async function loadHistoryCount() {
       headers: getApiHeaders()
     });
     const data = await res.json();
-    if (res.ok && elHeaderHistoryCount) {
-      elHeaderHistoryCount.innerText = data.total || 0;
+    if (res.ok) {
+      const count = data.total || 0;
+      if (elHeaderHistoryCount) elHeaderHistoryCount.innerText = count;
+      if (elDrawerHistoryCount) elDrawerHistoryCount.innerText = count;
     }
   } catch (e) {}
 }
@@ -372,6 +378,9 @@ async function openHistoryModal() {
     }
     if (elHeaderHistoryCount) {
       elHeaderHistoryCount.innerText = list.length;
+    }
+    if (elDrawerHistoryCount) {
+      elDrawerHistoryCount.innerText = list.length;
     }
   } catch (err) {
     showToast('Failed to load history', 'error');
@@ -1315,3 +1324,28 @@ function initRating() {
     });
   });
 }
+
+// ============================================================
+// 📱 Mobile Navigation Drawer Handler
+// ============================================================
+function toggleMobileNav(forceState) {
+  const drawer = document.getElementById('mobile-drawer');
+  const btn = document.getElementById('mobile-menu-btn');
+  if (!drawer || !btn) return;
+  const isOpen = forceState !== undefined ? forceState : !drawer.classList.contains('open');
+  if (isOpen) {
+    drawer.classList.add('open');
+    btn.classList.add('active');
+  } else {
+    drawer.classList.remove('open');
+    btn.classList.remove('active');
+  }
+}
+
+// Close mobile drawer when resizing back to desktop
+window.addEventListener('resize', () => {
+  if (window.innerWidth >= 1024) {
+    toggleMobileNav(false);
+  }
+});
+

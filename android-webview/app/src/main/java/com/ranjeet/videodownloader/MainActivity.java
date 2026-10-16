@@ -38,7 +38,7 @@ public class MainActivity extends AppCompatActivity {
     // 🔧 CONFIGURATION — Change your URL here
     // ============================================================
     // Option A: Use your Vercel deployed URL (recommended for WebView)
-    private static final String WEB_APP_URL = "https://your-app.vercel.app";
+    private static final String WEB_APP_URL = "https://video-downloader-ai-app.vercel.app";
     // Option B: Local development (when running npm run dev on same network)
     // private static final String WEB_APP_URL = "http://192.168.x.x:3000";
     // ============================================================

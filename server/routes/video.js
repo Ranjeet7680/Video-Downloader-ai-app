@@ -779,8 +779,9 @@ router.get('/stream', async (req, res) => {
     const cleanTitle = sanitizeFilename(title);
     const ext = isAudio ? 'mp3' : 'mp4';
     const downloadName = `${cleanTitle}_${quality}.${ext}`;
+    const isAttachment = req.query.download === '1' || req.query.dl === '1';
 
-    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
+    res.setHeader('Content-Disposition', `${isAttachment ? 'attachment' : 'inline'}; filename="${downloadName}"`);
     res.setHeader('Content-Type', isAudio ? 'audio/mpeg' : 'video/mp4');
 
     const flags = {
@@ -890,7 +891,8 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
     const userStats = db.getUserStats(userId);
     const isFreeUser = userStats.plan.id === 'free';
     const userDownloadName = `${cleanTitle}_${quality}.${ext}`;
-    const streamUrl = `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}`;
+    const streamPath = `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}`;
+    const streamDownloadUrl = `${streamPath}&dl=1`;
 
     // Fast-path for Vercel / serverless: instant direct stream completion without background timeout
     if (isVercel) {
@@ -904,8 +906,8 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
         quality: isAudio ? 'MP3 Audio' : quality,
         isAudio: isAudio,
         ext: ext,
-        path: streamUrl,
-        downloadUrl: streamUrl,
+        path: streamPath,
+        downloadUrl: streamDownloadUrl,
         watermarked: isFreeUser && !isAudio,
         planId: userStats.plan.id,
         planName: userStats.plan.name
@@ -921,7 +923,7 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
           format: ext,
           fileSize: isAudio ? '3.8 MB' : '18.4 MB',
           filename: userDownloadName,
-          downloadUrl: streamUrl,
+          downloadUrl: streamDownloadUrl,
           watermarked: isFreeUser && !isAudio
         });
       } catch (e) {}

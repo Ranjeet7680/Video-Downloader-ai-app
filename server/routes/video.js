@@ -657,6 +657,25 @@ router.post('/info', async (req, res) => {
   }
 });
 
+router.get('/debug-loader', async (req, res) => {
+  const result = {};
+  try {
+    const r = await axios.get('https://loader.to/ajax/download.php', {
+      params: { format: '720', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      headers: {
+        'User-Agent': BROWSER_USER_AGENT,
+        'Referer': 'https://loader.to/',
+        'Origin': 'https://loader.to'
+      },
+      timeout: 8000
+    });
+    result.loader = { status: r.status, data: r.data };
+  } catch (e) {
+    result.loader = { error: e.message, status: e.response?.status, data: e.response?.data };
+  }
+  res.json(result);
+});
+
 // ✅ POST /api/video/download
 // Start video or audio download job with database limit enforcement
 router.post('/download', async (req, res) => {

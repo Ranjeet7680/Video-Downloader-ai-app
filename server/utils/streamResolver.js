@@ -83,7 +83,11 @@ async function resolveYouTubeLoader(url, quality = '720p', isAudio = false) {
 
     const res = await axios.get('https://loader.to/ajax/download.php', {
       params: { format, url },
-      headers: { 'User-Agent': BROWSER_UA },
+      headers: {
+        'User-Agent': BROWSER_UA,
+        'Referer': 'https://loader.to/',
+        'Origin': 'https://loader.to'
+      },
       timeout: 8000
     });
 
@@ -98,7 +102,10 @@ async function resolveYouTubeLoader(url, quality = '720p', isAudio = false) {
         await new Promise(r => setTimeout(r, i === 0 ? 400 : 650));
         try {
           const poll = await axios.get(res.data.progress_url, {
-            headers: { 'User-Agent': BROWSER_UA },
+            headers: {
+              'User-Agent': BROWSER_UA,
+              'Referer': 'https://loader.to/'
+            },
             timeout: 5000
           });
           if (poll.data && poll.data.download_url && poll.data.download_url.startsWith('http')) {
@@ -220,6 +227,9 @@ async function resolveReddit(url) {
 
 // 7. Universal HTML / OpenGraph Scraper
 async function resolveOpenGraphVideo(url) {
+  // Never run OpenGraph scraper on YouTube! YouTube pages only contain HTML embed players, not media streams.
+  if (url.includes('youtube.com') || url.includes('youtu.be')) return null;
+
   try {
     const res = await axios.get(url, {
       headers: {
@@ -239,6 +249,10 @@ async function resolveOpenGraphVideo(url) {
     if (ogMatch && ogMatch[1]) {
       let vUrl = ogMatch[1].replace(/&amp;/g, '&');
       if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+      // Exclude HTML embed pages
+      if (vUrl.includes('youtube.com') || vUrl.includes('youtu.be') || vUrl.includes('/embed/') || vUrl.includes('player.')) {
+        return null;
+      }
       return vUrl;
     }
   } catch (e) {}

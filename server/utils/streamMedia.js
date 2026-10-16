@@ -26,6 +26,18 @@ function streamMediaFile(sourceUrl, req, res, downloadName = 'media.mp4', isAudi
         return streamMediaFile(redirectUrl, req, res, downloadName, isAudio, isAttachment);
       }
 
+      // Reject upstream HTML responses (e.g. anti-bot / error pages)
+      const upstreamContentType = (upstreamRes.headers['content-type'] || '').toLowerCase();
+      if (upstreamContentType.includes('text/html')) {
+        console.warn('Upstream returned HTML instead of media for:', sourceUrl);
+        if (!res.headersSent) {
+          return res.status(502).json({
+            error: 'Upstream media source returned an invalid stream format. Please retry in a few moments.'
+          });
+        }
+        return;
+      }
+
       // Only send 206 if upstream actually returned 206 and provided Content-Range.
       // If upstream sent 200 (or chunked), maintain 200 so HTML5 video players can parse metadata and duration properly!
       let statusCode = upstreamRes.statusCode || 200;

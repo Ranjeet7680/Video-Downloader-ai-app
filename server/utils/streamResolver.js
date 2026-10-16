@@ -74,7 +74,8 @@ async function resolveYouTubeLoader(url, quality = '720p', isAudio = false) {
       format = '360';
     }
 
-    const cacheKey = `loader_${url}_${format}`;
+    const ytId = extractYouTubeId(url);
+    const cacheKey = ytId ? `loader_yt_${ytId}_${format}` : `loader_${url}_${format}`;
     const cached = resolvedStreamCache.get(cacheKey);
     if (cached && (Date.now() - cached.ts) < 30 * 60 * 1000) {
       return cached.url;
@@ -86,10 +87,15 @@ async function resolveYouTubeLoader(url, quality = '720p', isAudio = false) {
       timeout: 8000
     });
 
+    if (res.data?.download_url && res.data.download_url.startsWith('http')) {
+      resolvedStreamCache.set(cacheKey, { url: res.data.download_url, ts: Date.now() });
+      return res.data.download_url;
+    }
+
     if (res.data && res.data.progress_url) {
-      // Poll progress for up to 14 attempts (approx 15 seconds)
-      for (let i = 0; i < 14; i++) {
-        await new Promise(r => setTimeout(r, 1100));
+      // Fast responsive polling (initial 400ms, then 650ms intervals)
+      for (let i = 0; i < 16; i++) {
+        await new Promise(r => setTimeout(r, i === 0 ? 400 : 650));
         try {
           const poll = await axios.get(res.data.progress_url, {
             headers: { 'User-Agent': BROWSER_UA },
@@ -115,12 +121,14 @@ async function resolveYouTubePiped(url, isAudio = false) {
 
   const instances = [
     'https://api.piped.private.coffee',
-    'https://pipedapi.tokhmi.xyz'
+    'https://pipedapi.drgns.space',
+    'https://cf.piped.video',
+    'https://piped-api.lunar.icu'
   ];
 
   for (const inst of instances) {
     try {
-      const res = await axios.get(`${inst}/streams/${ytId}`, { timeout: 4500 });
+      const res = await axios.get(`${inst}/streams/${ytId}`, { timeout: 3500 });
       if (res.data) {
         if (isAudio && res.data.audioStreams && res.data.audioStreams.length > 0) {
           const best = res.data.audioStreams.find(a => !a.url?.includes('odycdn')) || res.data.audioStreams[0];
@@ -272,11 +280,19 @@ async function resolveRealMediaStream(url, quality = '720p', isAudio = false) {
     const ytdlpStream = await resolveYouTubeLocalYtDlp(url, quality, isAudio);
     if (ytdlpStream) return ytdlpStream;
 
-    // Attempt cloud loader engine (works on Vercel serverless)
+    // Fast-path for Audio/MP3: try high-speed Piped audio stream first
+    if (isAudio) {
+      try {
+        const fastAudio = await resolveYouTubePiped(url, true);
+        if (fastAudio) return fastAudio;
+      } catch (e) {}
+    }
+
+    // Attempt cloud loader engine (works on Vercel serverless for all video qualities)
     const loaderStream = await resolveYouTubeLoader(url, quality, isAudio);
     if (loaderStream) return loaderStream;
 
-    // Attempt piped stream
+    // Attempt piped stream fallback
     const pipedStream = await resolveYouTubePiped(url, isAudio);
     if (pipedStream) return pipedStream;
   }

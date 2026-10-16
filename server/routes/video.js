@@ -941,7 +941,11 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
     if (isVercel) {
       let directStream = null;
       try {
-        directStream = await resolveRealMediaStream(url, quality, isAudio);
+        const quickTimeout = new Promise(r => setTimeout(() => r(null), 1500));
+        directStream = await Promise.race([
+          resolveRealMediaStream(url, quality, isAudio),
+          quickTimeout
+        ]);
       } catch (e) {}
 
       const streamPath = directStream

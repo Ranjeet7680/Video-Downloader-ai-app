@@ -884,9 +884,29 @@ async function triggerDownloadPipeline() {
     return;
   }
 
-  // 1. Pre-check / execute download API if download feature is enabled
-  let rootJobId = null;
+  // 1. Instantly transition to results panel so the user gets real-time visual feedback
+  elPanelUrl.style.display = 'none';
+  elPanelFeatures.style.display = 'none';
+  elPanelResults.style.display = 'block';
+  elJobsContainer.innerHTML = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  const tempJobId = 'job_' + Date.now();
+  let rootJobId = tempJobId;
   let dlData = null;
+
+  if (state.features.download) {
+    const cardTitle = isAudio ? '🎵 MP3 Audio Download' : `🎥 Video Download (${chosenQuality})`;
+    createJobCard(tempJobId, 'download', cardTitle);
+    updateJobUI({
+      id: tempJobId,
+      type: 'download',
+      status: 'processing',
+      progress: 30,
+      currentStep: '⚡ Connecting to high-speed stream engine...',
+      title: state.videoInfo?.title || 'Video'
+    });
+  }
 
   try {
     if (state.features.download) {
@@ -905,6 +925,9 @@ async function triggerDownloadPipeline() {
 
       // Check if daily download limit was reached
       if (!dlRes.ok) {
+        elPanelResults.style.display = 'none';
+        elPanelUrl.style.display = 'block';
+        elPanelFeatures.style.display = 'block';
         if (dlData.limitReached) {
           openLimitModal(dlData.message, dlData.stats);
           return;
@@ -913,26 +936,25 @@ async function triggerDownloadPipeline() {
       }
 
       rootJobId = dlData.jobId;
-    } else {
-      rootJobId = 'ai_suite_' + Date.now();
-    }
 
-    // Switch view to results panel
-    elPanelUrl.style.display = 'none';
-    elPanelFeatures.style.display = 'none';
-    elPanelResults.style.display = 'block';
-    elJobsContainer.innerHTML = '';
+      // Re-map temporary card ID and child elements to the actual server jobId
+      const cardEl = document.getElementById(`job-${tempJobId}`);
+      if (cardEl) {
+        cardEl.id = `job-${rootJobId}`;
+      }
+      ['status', 'progwrap', 'step', 'pct', 'bar', 'metrics', 'speed', 'eta', 'res'].forEach(k => {
+        const el = document.getElementById(`${k}-${tempJobId}`);
+        if (el) el.id = `${k}-${rootJobId}`;
+      });
 
-    // Download Job Card
-    if (state.features.download && rootJobId) {
-      const cardTitle = isAudio ? '🎵 MP3 Audio Download' : `🎥 Video Download (${chosenQuality})`;
-      createJobCard(rootJobId, 'download', cardTitle);
       if (dlData && dlData.job) {
         updateJobUI(dlData.job);
       }
       if (!dlData || !dlData.job || dlData.job.status !== 'completed') {
         pollJob(rootJobId, 'download', { url: videoUrl, quality: chosenQuality, title: state.videoInfo?.title });
       }
+    } else {
+      rootJobId = 'ai_suite_' + Date.now();
     }
 
     // AI Jobs if enabled

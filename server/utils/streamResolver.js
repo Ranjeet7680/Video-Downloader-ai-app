@@ -97,9 +97,9 @@ async function resolveYouTubeLoader(url, quality = '720p', isAudio = false) {
     }
 
     if (res.data && res.data.progress_url) {
-      // Fast responsive polling (initial 400ms, then 650ms intervals)
-      for (let i = 0; i < 16; i++) {
-        await new Promise(r => setTimeout(r, i === 0 ? 400 : 650));
+      // Poll progress with reliable intervals (initial 500ms, then 850ms intervals)
+      for (let i = 0; i < 26; i++) {
+        await new Promise(r => setTimeout(r, i === 0 ? 500 : 850));
         try {
           const poll = await axios.get(res.data.progress_url, {
             headers: {

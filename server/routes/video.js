@@ -657,42 +657,6 @@ router.post('/info', async (req, res) => {
   }
 });
 
-router.get('/debug-loader', async (req, res) => {
-  const result = { polls: [] };
-  try {
-    const r = await axios.get('https://loader.to/ajax/download.php', {
-      params: { format: '720', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
-      headers: {
-        'User-Agent': BROWSER_USER_AGENT,
-        'Referer': 'https://loader.to/',
-        'Origin': 'https://loader.to'
-      },
-      timeout: 8000
-    });
-    result.loader = { status: r.status, data: r.data };
-    if (r.data?.progress_url) {
-      for (let i = 0; i < 3; i++) {
-        await new Promise(res => setTimeout(res, 800));
-        try {
-          const p = await axios.get(r.data.progress_url, {
-            headers: {
-              'User-Agent': BROWSER_USER_AGENT,
-              'Referer': 'https://loader.to/'
-            },
-            timeout: 5000
-          });
-          result.polls.push({ poll: i, status: p.status, data: p.data });
-        } catch (pe) {
-          result.polls.push({ poll: i, error: pe.message, status: pe.response?.status, data: pe.response?.data });
-        }
-      }
-    }
-  } catch (e) {
-    result.loader = { error: e.message, status: e.response?.status, data: e.response?.data };
-  }
-  res.json(result);
-});
-
 // ✅ POST /api/video/download
 // Start video or audio download job with database limit enforcement
 router.post('/download', async (req, res) => {

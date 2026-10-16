@@ -777,22 +777,25 @@ router.get('/stream', async (req, res) => {
 
     if (!url) return res.status(400).send('URL is required');
 
-    const check = db.canUserDownload(userId, quality);
-    if (!check.allowed) {
-      return res.status(403).json({
-        success: false,
-        limitReached: true,
-        reason: check.reason,
-        message: check.message,
-        stats: check.stats
-      });
-    }
-
     const isAudio = quality === 'audio' || quality === 'audio-mp3' || quality === 'mp3';
     const cleanTitle = sanitizeFilename(title);
     const ext = isAudio ? 'mp3' : 'mp4';
     const downloadName = `${cleanTitle}_${quality}.${ext}`;
     const isAttachment = req.query.download === '1' || req.query.dl === '1';
+
+    // Enforce plan quota on actual attachment download (Save button), not on player preview playback
+    if (isAttachment) {
+      const check = db.canUserDownload(userId, quality);
+      if (!check.allowed) {
+        return res.status(403).json({
+          success: false,
+          limitReached: true,
+          reason: check.reason,
+          message: check.message,
+          stats: check.stats
+        });
+      }
+    }
 
     // 1. Check if directUrl parameter was pre-resolved
     let targetStreamUrl = req.query.directUrl || null;
@@ -804,17 +807,19 @@ router.get('/stream', async (req, res) => {
 
     // 3. If stream URL resolved, stream directly with full Range 206 Partial Content support!
     if (targetStreamUrl) {
-      try {
-        db.recordDownload(userId, {
-          videoTitle: title,
-          url,
-          quality: isAudio ? 'MP3 Audio' : quality,
-          format: ext,
-          fileSize: isAudio ? '3.8 MB' : '18.4 MB',
-          filename: downloadName,
-          downloadUrl: `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(title)}&dl=1`
-        });
-      } catch (e) {}
+      if (isAttachment) {
+        try {
+          db.recordDownload(userId, {
+            videoTitle: title,
+            url,
+            quality: isAudio ? 'MP3 Audio' : quality,
+            format: ext,
+            fileSize: isAudio ? '3.8 MB' : '18.4 MB',
+            filename: downloadName,
+            downloadUrl: `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(title)}&userId=${encodeURIComponent(userId)}&dl=1`
+          });
+        } catch (e) {}
+      }
 
       return streamMediaFile(targetStreamUrl, req, res, downloadName, isAudio, isAttachment);
     }
@@ -951,8 +956,8 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
       } catch (e) {}
 
       const streamPath = directStream
-        ? `/api/video/stream?url=${encodeURIComponent(url)}&directUrl=${encodeURIComponent(directStream)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}`
-        : `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}`;
+        ? `/api/video/stream?url=${encodeURIComponent(url)}&directUrl=${encodeURIComponent(directStream)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}&userId=${encodeURIComponent(userId)}`
+        : `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}&userId=${encodeURIComponent(userId)}`;
       const streamDownloadUrl = `${streamPath}&dl=1`;
 
       job.progress = 100;
@@ -1179,7 +1184,7 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
         const userStats = db.getUserStats(userId);
         const isFreeUser = userStats.plan.id === 'free';
         const fallbackWatermarked = isFreeUser && !isAudio;
-        const streamPath = `/api/video/stream?url=${encodeURIComponent(url)}&directUrl=${encodeURIComponent(realStream)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'Video')}`;
+        const streamPath = `/api/video/stream?url=${encodeURIComponent(url)}&directUrl=${encodeURIComponent(realStream)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'Video')}&userId=${encodeURIComponent(userId)}`;
         const streamDownloadUrl = `${streamPath}&dl=1`;
 
         job.progress = 100;

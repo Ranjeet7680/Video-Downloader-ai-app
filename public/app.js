@@ -1232,6 +1232,16 @@ function renderJobResult(type, result, container) {
            </div>`
     ) : '';
 
+    const activeUserId = state.userId || state.stats?.user?.id || 'guest_default';
+    let playerSrc = result.path || '';
+    if (playerSrc && playerSrc.startsWith('/api/') && !playerSrc.includes('userId=')) {
+      playerSrc += `${playerSrc.includes('?') ? '&' : '?'}userId=${encodeURIComponent(activeUserId)}`;
+    }
+    let dlLink = result.downloadUrl || playerSrc;
+    if (dlLink && dlLink.startsWith('/api/') && !dlLink.includes('userId=')) {
+      dlLink += `${dlLink.includes('?') ? '&' : '?'}userId=${encodeURIComponent(activeUserId)}`;
+    }
+
     html = `
       <div class="result-media-card">
         <div class="media-preview-box">
@@ -1242,10 +1252,10 @@ function renderJobResult(type, result, container) {
                 <div class="audio-title">${result.title || 'Audio Stream'}</div>
                 <div class="audio-sub">High Quality MP3 • ${result.size}</div>
               </div>
-              <audio controls src="${result.path}" class="native-audio-player"></audio>
+              <audio controls preload="metadata" src="${playerSrc}" class="native-audio-player"></audio>
             </div>
           ` : `
-            <video controls playsinline src="${result.path}" class="native-video-player" poster="${state.videoInfo?.thumbnail || ''}"></video>
+            <video controls playsinline preload="metadata" src="${playerSrc}" class="native-video-player" poster="${state.videoInfo?.thumbnail || ''}"></video>
           `}
         </div>
 
@@ -1273,10 +1283,10 @@ function renderJobResult(type, result, container) {
         ${watermarkNoticeHtml}
 
         <div class="result-actions-row">
-          <a href="${result.downloadUrl}" download="${result.filename}" class="result-btn primary big-btn">
+          <a href="${dlLink}" download="${result.filename}" class="result-btn primary big-btn">
             ⬇️ Save ${isAudio ? 'MP3 Audio' : 'Video File'}
           </a>
-          <button class="result-btn" onclick="copyDirectDownloadLink('${result.downloadUrl}')">
+          <button class="result-btn" onclick="copyDirectDownloadLink('${dlLink}')">
             📋 Copy Direct Link
           </button>
           <button class="result-btn ghost" onclick="resetTool()">

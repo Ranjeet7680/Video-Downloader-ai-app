@@ -53,26 +53,50 @@ async function resolveYouTubeLocalYtDlp(url, quality = '720p', isAudio = false) 
   return null;
 }
 
+// In-memory cache for resolved media streams (30-minute validity)
+const resolvedStreamCache = new Map();
+
 // 2. YouTube Resolver via Cloud Loader Engine (Serverless / Vercel resilient)
 async function resolveYouTubeLoader(url, quality = '720p', isAudio = false) {
   try {
-    const format = isAudio ? 'mp3' : (quality.includes('1080') ? '1080' : '720');
+    let format = '720';
+    if (isAudio) {
+      format = 'mp3';
+    } else if (quality.includes('1080')) {
+      format = '1080';
+    } else if (quality.includes('1440') || quality.includes('2k')) {
+      format = '1440';
+    } else if (quality.includes('2160') || quality.includes('4k')) {
+      format = '4k';
+    } else if (quality.includes('480')) {
+      format = '480';
+    } else if (quality.includes('360')) {
+      format = '360';
+    }
+
+    const cacheKey = `loader_${url}_${format}`;
+    const cached = resolvedStreamCache.get(cacheKey);
+    if (cached && (Date.now() - cached.ts) < 30 * 60 * 1000) {
+      return cached.url;
+    }
+
     const res = await axios.get('https://loader.to/ajax/download.php', {
       params: { format, url },
       headers: { 'User-Agent': BROWSER_UA },
-      timeout: 7000
+      timeout: 8000
     });
 
     if (res.data && res.data.progress_url) {
-      // Poll progress for up to 8 seconds
-      for (let i = 0; i < 7; i++) {
-        await new Promise(r => setTimeout(r, 1200));
+      // Poll progress for up to 14 attempts (approx 15 seconds)
+      for (let i = 0; i < 14; i++) {
+        await new Promise(r => setTimeout(r, 1100));
         try {
           const poll = await axios.get(res.data.progress_url, {
             headers: { 'User-Agent': BROWSER_UA },
             timeout: 5000
           });
           if (poll.data && poll.data.download_url && poll.data.download_url.startsWith('http')) {
+            resolvedStreamCache.set(cacheKey, { url: poll.data.download_url, ts: Date.now() });
             return poll.data.download_url;
           }
         } catch (pollErr) {}
@@ -99,10 +123,15 @@ async function resolveYouTubePiped(url, isAudio = false) {
       const res = await axios.get(`${inst}/streams/${ytId}`, { timeout: 4500 });
       if (res.data) {
         if (isAudio && res.data.audioStreams && res.data.audioStreams.length > 0) {
-          const best = res.data.audioStreams[0];
-          if (best && best.url) return best.url;
+          const best = res.data.audioStreams.find(a => !a.url?.includes('odycdn')) || res.data.audioStreams[0];
+          if (best && best.url && !best.url.includes('odycdn')) return best.url;
         }
-        const prog = (res.data.videoStreams || []).filter(v => !v.videoOnly && (v.format || '').includes('MP4'));
+        const prog = (res.data.videoStreams || []).filter(v =>
+          !v.videoOnly &&
+          (v.format || '').includes('MP4') &&
+          v.url &&
+          !v.url.includes('odycdn')
+        );
         if (prog.length > 0 && prog[0].url) {
           return prog[0].url;
         }

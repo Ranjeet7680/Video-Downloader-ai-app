@@ -16,8 +16,13 @@ try {
 const { spawnSync } = require('child_process');
 const jobStore = require('../utils/jobStore');
 const db = require('../utils/db');
-const { streamMediaFile } = require('../utils/streamMedia');
-const { resolveRealMediaStream } = require('../utils/streamResolver');
+const {
+  resolveRealMediaStream,
+  getLoaderFormat,
+  initLoaderConversion,
+  checkLoaderProgress,
+  resolvedStreamCache
+} = require('../utils/streamResolver');
 
 // Locate ffmpeg-static or system ffmpeg
 let ffmpegPath = null;
@@ -715,7 +720,9 @@ router.post('/download', async (req, res) => {
         success: true,
         jobId,
         job: finishedJob,
-        message: `🎥 Download ready for ${quality}!`,
+        message: finishedJob.status === 'completed'
+          ? `🎥 Download ready for ${quality}!`
+          : `🚀 Cloud conversion in progress for ${quality} (${finishedJob.progress}%)...`,
         quality,
         stats: check.stats
       });
@@ -937,54 +944,172 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
     const streamPath = `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}`;
     const streamDownloadUrl = `${streamPath}&dl=1`;
 
-    // Fast-path for Vercel / serverless: instant direct stream completion without background timeout
+    // Cloud Conversion for Vercel & serverless environments (asynchronous, non-blocking)
     if (isVercel) {
+      const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
+      const ytId = extractYouTubeId(url);
+      const formatKey = isAudio ? 'mp3' : getLoaderFormat(quality, isAudio);
+      const cacheKey = ytId ? `loader_yt_${ytId}_${formatKey}` : `loader_${url}_${formatKey}`;
+
+      // 1. Check if stream is already resolved in cache
+      const cached = resolvedStreamCache.get(cacheKey);
+      if (cached && cached.url) {
+        const directStream = cached.url;
+        const streamPath = `/api/video/stream?url=${encodeURIComponent(url)}&directUrl=${encodeURIComponent(directStream)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}&userId=${encodeURIComponent(userId)}`;
+        const streamDownloadUrl = `${streamPath}&dl=1`;
+
+        job.progress = 100;
+        job.status = 'completed';
+        job.currentStep = '✅ Download ready!';
+        job.result = {
+          filename: userDownloadName,
+          title: resolvedTitle || 'Video',
+          size: isAudio ? '3.8 MB' : (quality === '1080p' ? '45.2 MB' : '28.8 MB'),
+          quality: isAudio ? 'MP3 Audio' : quality,
+          isAudio: isAudio,
+          ext: ext,
+          path: streamPath,
+          downloadUrl: streamDownloadUrl,
+          directUrl: directStream,
+          watermarked: isFreeUser && !isAudio,
+          planId: userStats.plan.id,
+          planName: userStats.plan.name
+        };
+        jobStore.set(jobId, job);
+        try {
+          db.recordDownload(userId, {
+            videoTitle: resolvedTitle || 'Video',
+            url,
+            thumbnail: resolvedThumb || '',
+            quality: isAudio ? 'MP3 Audio' : quality,
+            format: ext,
+            fileSize: isAudio ? '3.8 MB' : '28.8 MB',
+            filename: userDownloadName,
+            downloadUrl: streamDownloadUrl,
+            watermarked: isFreeUser && !isAudio
+          });
+        } catch (e) {}
+        return;
+      }
+
+      // 2. If YouTube, initiate high-speed cloud conversion asynchronously
+      if (isYouTube) {
+        const init = await initLoaderConversion(url, quality, isAudio);
+        if (init.done && init.downloadUrl) {
+          // Already converted upstream!
+          const directStream = init.downloadUrl;
+          const streamPath = `/api/video/stream?url=${encodeURIComponent(url)}&directUrl=${encodeURIComponent(directStream)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}&userId=${encodeURIComponent(userId)}`;
+          const streamDownloadUrl = `${streamPath}&dl=1`;
+
+          job.progress = 100;
+          job.status = 'completed';
+          job.currentStep = '✅ Download ready!';
+          job.result = {
+            filename: userDownloadName,
+            title: resolvedTitle || 'Video',
+            size: isAudio ? '3.8 MB' : (quality === '1080p' ? '45.2 MB' : '28.8 MB'),
+            quality: isAudio ? 'MP3 Audio' : quality,
+            isAudio: isAudio,
+            ext: ext,
+            path: streamPath,
+            downloadUrl: streamDownloadUrl,
+            directUrl: directStream,
+            watermarked: isFreeUser && !isAudio,
+            planId: userStats.plan.id,
+            planName: userStats.plan.name
+          };
+          jobStore.set(jobId, job);
+          try {
+            db.recordDownload(userId, {
+              videoTitle: resolvedTitle || 'Video',
+              url,
+              thumbnail: resolvedThumb || '',
+              quality: isAudio ? 'MP3 Audio' : quality,
+              format: ext,
+              fileSize: isAudio ? '3.8 MB' : '28.8 MB',
+              filename: userDownloadName,
+              downloadUrl: streamDownloadUrl,
+              watermarked: isFreeUser && !isAudio
+            });
+          } catch (e) {}
+          return;
+        }
+
+        if (init.progressUrl) {
+          // Cloud conversion in progress! Keep job in 'processing' status so frontend polls smoothly
+          job.status = 'processing';
+          job.progress = 25;
+          job.currentStep = '🚀 Cloud engine is converting video (25%)...';
+          job.progressUrl = init.progressUrl;
+          job.cacheKey = init.cacheKey;
+          job.url = url;
+          job.quality = quality;
+          job.isAudio = isAudio;
+          job.userId = userId;
+          job.title = resolvedTitle;
+          job.thumbnail = resolvedThumb;
+          jobStore.set(jobId, job);
+          return;
+        }
+      }
+
+      // 3. For Non-YouTube (TikTok, Twitter, Reddit, etc.) or YouTube fallback
       let directStream = null;
       try {
-        const quickTimeout = new Promise(r => setTimeout(() => r(null), 1500));
+        const quickTimeout = new Promise(r => setTimeout(() => r(null), 3000));
         directStream = await Promise.race([
           resolveRealMediaStream(url, quality, isAudio),
           quickTimeout
         ]);
       } catch (e) {}
 
-      const streamPath = directStream
-        ? `/api/video/stream?url=${encodeURIComponent(url)}&directUrl=${encodeURIComponent(directStream)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}&userId=${encodeURIComponent(userId)}`
-        : `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}&userId=${encodeURIComponent(userId)}`;
-      const streamDownloadUrl = `${streamPath}&dl=1`;
+      if (directStream) {
+        const streamPath = `/api/video/stream?url=${encodeURIComponent(url)}&directUrl=${encodeURIComponent(directStream)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}&userId=${encodeURIComponent(userId)}`;
+        const streamDownloadUrl = `${streamPath}&dl=1`;
 
-      job.progress = 100;
-      job.status = 'completed';
-      job.currentStep = '✅ Download ready!';
-      job.result = {
-        filename: userDownloadName,
-        title: resolvedTitle || 'Video',
-        size: isAudio ? '3.8 MB' : (quality === '1080p' ? '45.2 MB' : '18.4 MB'),
-        quality: isAudio ? 'MP3 Audio' : quality,
-        isAudio: isAudio,
-        ext: ext,
-        path: streamPath,
-        downloadUrl: streamDownloadUrl,
-        watermarked: isFreeUser && !isAudio,
-        planId: userStats.plan.id,
-        planName: userStats.plan.name
-      };
-      jobStore.set(jobId, job);
-
-      try {
-        db.recordDownload(userId, {
-          videoTitle: resolvedTitle || 'Video',
-          url,
-          thumbnail: resolvedThumb || '',
-          quality: isAudio ? 'MP3 Audio' : quality,
-          format: ext,
-          fileSize: isAudio ? '3.8 MB' : '18.4 MB',
+        job.progress = 100;
+        job.status = 'completed';
+        job.currentStep = '✅ Download ready!';
+        job.result = {
           filename: userDownloadName,
+          title: resolvedTitle || 'Video',
+          size: isAudio ? '3.8 MB' : (quality === '1080p' ? '45.2 MB' : '18.4 MB'),
+          quality: isAudio ? 'MP3 Audio' : quality,
+          isAudio: isAudio,
+          ext: ext,
+          path: streamPath,
           downloadUrl: streamDownloadUrl,
-          watermarked: isFreeUser && !isAudio
-        });
-      } catch (e) {}
+          directUrl: directStream,
+          watermarked: isFreeUser && !isAudio,
+          planId: userStats.plan.id,
+          planName: userStats.plan.name
+        };
+        jobStore.set(jobId, job);
+        try {
+          db.recordDownload(userId, {
+            videoTitle: resolvedTitle || 'Video',
+            url,
+            thumbnail: resolvedThumb || '',
+            quality: isAudio ? 'MP3 Audio' : quality,
+            format: ext,
+            fileSize: isAudio ? '3.8 MB' : '18.4 MB',
+            filename: userDownloadName,
+            downloadUrl: streamDownloadUrl,
+            watermarked: isFreeUser && !isAudio
+          });
+        } catch (e) {}
+        return;
+      }
 
+      // If unresolved within fast window, mark processing
+      job.status = 'processing';
+      job.progress = 40;
+      job.currentStep = '⚡ Resolving media stream from source...';
+      job.url = url;
+      job.quality = quality;
+      job.isAudio = isAudio;
+      job.userId = userId;
+      jobStore.set(jobId, job);
       return;
     }
     const shortId = jobId.slice(0, 6);

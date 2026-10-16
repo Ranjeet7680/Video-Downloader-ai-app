@@ -951,7 +951,12 @@ async function triggerDownloadPipeline() {
         updateJobUI(dlData.job);
       }
       if (!dlData || !dlData.job || dlData.job.status !== 'completed') {
-        pollJob(rootJobId, 'download', { url: videoUrl, quality: chosenQuality, title: state.videoInfo?.title });
+        pollJob(rootJobId, 'download', {
+          url: videoUrl,
+          quality: chosenQuality,
+          title: state.videoInfo?.title,
+          progressUrl: dlData?.job?.progressUrl
+        });
       }
     } else {
       rootJobId = 'ai_suite_' + Date.now();
@@ -1080,6 +1085,7 @@ function pollJob(jobId, type = 'download', ctx = {}) {
       if (ctx.title) qParams.set('title', ctx.title);
       if (type) qParams.set('type', type);
       if (ctx.language) qParams.set('language', ctx.language);
+      if (ctx.progressUrl) qParams.set('progressUrl', ctx.progressUrl);
 
       const res = await fetch(`${API_BASE}/jobs/${jobId}?${qParams.toString()}`);
       const data = await res.json();
@@ -1087,6 +1093,7 @@ function pollJob(jobId, type = 'download', ctx = {}) {
       if (res.ok && data.job) {
         const job = data.job;
         if (!job.type && type) job.type = type;
+        if (job.progressUrl && !ctx.progressUrl) ctx.progressUrl = job.progressUrl;
         updateJobUI(job);
 
         if (job.status === 'completed' || job.status === 'error') {
@@ -1274,10 +1281,10 @@ function renderJobResult(type, result, container) {
                 <div class="audio-title">${result.title || 'Audio Stream'}</div>
                 <div class="audio-sub">High Quality MP3 • ${result.size}</div>
               </div>
-              <audio controls preload="metadata" src="${playerSrc}" class="native-audio-player"></audio>
+              <audio controls preload="auto" src="${playerSrc}" class="native-audio-player"></audio>
             </div>
           ` : `
-            <video controls playsinline preload="metadata" src="${playerSrc}" class="native-video-player" poster="${state.videoInfo?.thumbnail || ''}"></video>
+            <video controls playsinline preload="auto" src="${playerSrc}" class="native-video-player" poster="${state.videoInfo?.thumbnail || ''}"></video>
           `}
         </div>
 

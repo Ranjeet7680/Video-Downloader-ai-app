@@ -525,6 +525,31 @@ function deleteJob(jobId) {
   return false;
 }
 
+function setStream(key, url) {
+  try {
+    const db = loadDb();
+    if (!db.streams) db.streams = {};
+    db.streams[key] = { url, ts: Date.now() };
+    saveDb();
+  } catch (e) {}
+}
+
+function getStream(key) {
+  try {
+    const db = loadDb();
+    if (!db.streams || !db.streams[key]) return null;
+    const item = db.streams[key];
+    if (Date.now() - item.ts > 45 * 60 * 1000) {
+      delete db.streams[key];
+      saveDb();
+      return null;
+    }
+    return item.url;
+  } catch (e) {
+    return null;
+  }
+}
+
 module.exports = {
   loadDb,
   saveDb,
@@ -544,5 +569,7 @@ module.exports = {
   setJob,
   getJob,
   getAllJobs,
-  deleteJob
+  deleteJob,
+  setStream,
+  getStream
 };

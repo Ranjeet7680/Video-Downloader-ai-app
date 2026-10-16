@@ -1,6 +1,7 @@
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
+const db = require('./db');
 
 let ytDlp = null;
 try {
@@ -56,29 +57,33 @@ async function resolveYouTubeLocalYtDlp(url, quality = '720p', isAudio = false) 
 // In-memory cache for resolved media streams (30-minute validity)
 const resolvedStreamCache = new Map();
 
-// 2. YouTube Resolver via Cloud Loader Engine (Serverless / Vercel resilient)
-async function resolveYouTubeLoader(url, quality = '720p', isAudio = false) {
-  try {
-    let format = '720';
-    if (isAudio) {
-      format = 'mp3';
-    } else if (quality.includes('1080')) {
-      format = '1080';
-    } else if (quality.includes('1440') || quality.includes('2k')) {
-      format = '1440';
-    } else if (quality.includes('2160') || quality.includes('4k')) {
-      format = '4k';
-    } else if (quality.includes('480')) {
-      format = '480';
-    } else if (quality.includes('360')) {
-      format = '360';
-    }
+function getLoaderFormat(quality = '720p', isAudio = false) {
+  if (isAudio) return 'mp3';
+  const q = String(quality || '').toLowerCase();
+  if (q.includes('1080')) return '1080';
+  if (q.includes('1440') || q.includes('2k')) return '1440';
+  if (q.includes('2160') || q.includes('4k')) return '4k';
+  if (q.includes('4320') || q.includes('8k')) return '8k';
+  if (q.includes('480')) return '480';
+  if (q.includes('360')) return '360';
+  if (q.includes('240') || q.includes('144')) return '360';
+  return '720';
+}
 
+// Initiate cloud conversion (takes ~500ms, returns progressUrl or downloadUrl)
+async function initLoaderConversion(url, quality = '720p', isAudio = false) {
+  try {
+    const format = getLoaderFormat(quality, isAudio);
     const ytId = extractYouTubeId(url);
     const cacheKey = ytId ? `loader_yt_${ytId}_${format}` : `loader_${url}_${format}`;
-    const cached = resolvedStreamCache.get(cacheKey);
-    if (cached && (Date.now() - cached.ts) < 30 * 60 * 1000) {
-      return cached.url;
+    let cached = resolvedStreamCache.get(cacheKey);
+    if (!cached && db.getStream) {
+      const persistedUrl = db.getStream(cacheKey);
+      if (persistedUrl) cached = { url: persistedUrl, ts: Date.now() };
+    }
+    if (cached && (Date.now() - cached.ts) < 45 * 60 * 1000) {
+      resolvedStreamCache.set(cacheKey, cached);
+      return { done: true, downloadUrl: cached.url, cacheKey };
     }
 
     const res = await axios.get('https://loader.to/ajax/download.php', {
@@ -93,26 +98,84 @@ async function resolveYouTubeLoader(url, quality = '720p', isAudio = false) {
 
     if (res.data?.download_url && res.data.download_url.startsWith('http')) {
       resolvedStreamCache.set(cacheKey, { url: res.data.download_url, ts: Date.now() });
-      return res.data.download_url;
+      if (db.setStream) db.setStream(cacheKey, res.data.download_url);
+      return {
+        done: true,
+        downloadUrl: res.data.download_url,
+        title: res.data.title,
+        thumbnail: res.data.thumbnail_url || res.data.info?.image,
+        cacheKey
+      };
     }
 
     if (res.data && res.data.progress_url) {
-      // Poll progress with reliable intervals (initial 500ms, then 850ms intervals)
+      return {
+        done: false,
+        progressUrl: res.data.progress_url,
+        id: res.data.id,
+        title: res.data.title,
+        thumbnail: res.data.thumbnail_url || res.data.info?.image,
+        cacheKey
+      };
+    }
+  } catch (e) {
+    console.warn('initLoaderConversion error:', e.message);
+  }
+  return { done: false, error: 'Failed to initialize conversion' };
+}
+
+// Single progress probe (takes ~150ms, returns status or downloadUrl)
+async function checkLoaderProgress(progressUrl, cacheKey = null) {
+  if (!progressUrl) return { done: false, error: 'Missing progressUrl' };
+  try {
+    const poll = await axios.get(progressUrl, {
+      headers: {
+        'User-Agent': BROWSER_UA,
+        'Referer': 'https://loader.to/'
+      },
+      timeout: 5000
+    });
+
+    if (poll.data && poll.data.download_url && poll.data.download_url.startsWith('http')) {
+      if (cacheKey) {
+        resolvedStreamCache.set(cacheKey, { url: poll.data.download_url, ts: Date.now() });
+        if (db.setStream) db.setStream(cacheKey, poll.data.download_url);
+      }
+      return {
+        done: true,
+        downloadUrl: poll.data.download_url,
+        progress: 1000,
+        text: 'Finished'
+      };
+    }
+
+    return {
+      done: false,
+      downloadUrl: null,
+      progress: poll.data?.progress || 0,
+      text: poll.data?.text || 'Processing'
+    };
+  } catch (e) {
+    console.warn('checkLoaderProgress error:', e.message);
+    return { done: false, error: e.message };
+  }
+}
+
+// 2. YouTube Resolver via Cloud Loader Engine (Serverless / Vercel resilient)
+async function resolveYouTubeLoader(url, quality = '720p', isAudio = false) {
+  try {
+    const init = await initLoaderConversion(url, quality, isAudio);
+    if (init.done && init.downloadUrl) {
+      return init.downloadUrl;
+    }
+
+    if (init.progressUrl) {
       for (let i = 0; i < 26; i++) {
         await new Promise(r => setTimeout(r, i === 0 ? 500 : 850));
-        try {
-          const poll = await axios.get(res.data.progress_url, {
-            headers: {
-              'User-Agent': BROWSER_UA,
-              'Referer': 'https://loader.to/'
-            },
-            timeout: 5000
-          });
-          if (poll.data && poll.data.download_url && poll.data.download_url.startsWith('http')) {
-            resolvedStreamCache.set(cacheKey, { url: poll.data.download_url, ts: Date.now() });
-            return poll.data.download_url;
-          }
-        } catch (pollErr) {}
+        const check = await checkLoaderProgress(init.progressUrl, init.cacheKey);
+        if (check.done && check.downloadUrl) {
+          return check.downloadUrl;
+        }
       }
     }
   } catch (e) {
@@ -332,5 +395,10 @@ async function resolveRealMediaStream(url, quality = '720p', isAudio = false) {
 
 module.exports = {
   resolveRealMediaStream,
-  extractYouTubeId
+  extractYouTubeId,
+  getLoaderFormat,
+  initLoaderConversion,
+  checkLoaderProgress,
+  resolveYouTubeLoader,
+  resolvedStreamCache
 };

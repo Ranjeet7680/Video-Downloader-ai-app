@@ -16,6 +16,7 @@ try {
 const { spawnSync } = require('child_process');
 const jobStore = require('../utils/jobStore');
 const db = require('../utils/db');
+const { streamMediaFile } = require('../utils/streamMedia');
 const {
   resolveRealMediaStream,
   getLoaderFormat,

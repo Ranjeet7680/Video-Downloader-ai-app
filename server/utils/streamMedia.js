@@ -12,6 +12,15 @@ function streamMediaFile(sourceUrl, req, res, downloadName = 'media.mp4', isAudi
       'Accept-Encoding': 'identity'
     };
 
+    if (sourceUrl.includes('loader.to') || sourceUrl.includes('savenow.to') || sourceUrl.includes('affadaffa.com')) {
+      headers['Referer'] = 'https://loader.to/';
+      headers['Origin'] = 'https://loader.to';
+    } else if (sourceUrl.includes('tiktok.com') || sourceUrl.includes('tiktokcdn')) {
+      headers['Referer'] = 'https://www.tiktok.com/';
+    } else if (sourceUrl.includes('twitter.com') || sourceUrl.includes('twimg')) {
+      headers['Referer'] = 'https://twitter.com/';
+    }
+
     if (req && req.headers && req.headers.range) {
       headers['Range'] = req.headers.range;
     }

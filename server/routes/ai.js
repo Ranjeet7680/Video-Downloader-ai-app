@@ -6,6 +6,7 @@ const fs = require('fs');
 const { spawnSync } = require('child_process');
 const jobStore = require('../utils/jobStore');
 const { streamMediaFile } = require('../utils/streamMedia');
+const { resolveRealMediaStream } = require('../utils/streamResolver');
 
 // Ensure sample vertical reel MP4 is available for instant clip downloads
 const UPLOADS_DIR = process.env.VERCEL ? '/tmp/uploads' : path.join(__dirname, '../../uploads');
@@ -172,8 +173,8 @@ router.post('/subtitles', async (req, res) => {
 
 // ✅ GET /api/ai/clip-download
 // Downloads reel highlight video clip
-router.get('/clip-download', (req, res) => {
-  const { clipId = '1', title = 'Highlight_Reel' } = req.query;
+router.get('/clip-download', async (req, res) => {
+  const { clipId = '1', title = 'Highlight_Reel', url } = req.query;
   const filename = `${title.replace(/[^\w\-]/g, '_')}_${clipId}.mp4`;
   const reelPath = ensureSampleReel();
 
@@ -181,8 +182,17 @@ router.get('/clip-download', (req, res) => {
     return res.download(reelPath, filename);
   }
 
-  // Same-origin resilient media stream proxy (preserves attachment filename on browser downloads)
-  return streamMediaFile('https://www.w3schools.com/html/mov_bbb.mp4', req, res, filename, false, true);
+  // If source URL is provided, stream the real video source
+  if (url) {
+    try {
+      const realStream = await resolveRealMediaStream(url, '720p', false);
+      if (realStream) {
+        return streamMediaFile(realStream, req, res, filename, false, true);
+      }
+    } catch (e) {}
+  }
+
+  return res.status(404).json({ error: 'Highlight clip not found.' });
 });
 
 // ✅ GET /api/ai/subtitles-download

@@ -17,6 +17,7 @@ const { spawnSync } = require('child_process');
 const jobStore = require('../utils/jobStore');
 const db = require('../utils/db');
 const { streamMediaFile } = require('../utils/streamMedia');
+const { resolveRealMediaStream } = require('../utils/streamResolver');
 
 // Locate ffmpeg-static or system ffmpeg
 let ffmpegPath = null;
@@ -588,6 +589,7 @@ router.post('/info', async (req, res) => {
         dumpSingleJson: true,
         noWarnings: true,
         noCheckCertificate: true,
+        jsRuntimes: 'node',
         userAgent: BROWSER_USER_AGENT,
         referer: url,
         addHeader: [
@@ -738,7 +740,7 @@ router.post('/download', async (req, res) => {
 
 // ✅ GET /api/video/file/:filename
 // Direct download endpoint with Content-Disposition header
-router.get('/file/:filename', (req, res) => {
+router.get('/file/:filename', async (req, res) => {
   const { filename } = req.params;
   const customName = req.query.name || filename;
   const filePath = path.join(UPLOADS_DIR, filename);
@@ -752,16 +754,22 @@ router.get('/file/:filename', (req, res) => {
     });
   }
 
-  // Graceful fallback for serverless (Vercel) when local file has expired or was cleaned up
+  // File not found on disk: If URL is provided, resolve real media stream dynamically
   const isAudio = filename.endsWith('.mp3') || customName.endsWith('.mp3');
-  const fallbackSource = isAudio
-    ? 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
-    : 'https://www.w3schools.com/html/mov_bbb.mp4';
-  return streamMediaFile(fallbackSource, req, res, customName, isAudio, true);
+  if (req.query.url) {
+    try {
+      const realStream = await resolveRealMediaStream(req.query.url, req.query.quality || '720p', isAudio);
+      if (realStream) {
+        return streamMediaFile(realStream, req, res, customName, isAudio, true);
+      }
+    } catch (e) {}
+  }
+
+  return res.status(404).json({ error: 'Download file not found or expired. Please initiate a fresh download.' });
 });
 
 // ✅ GET /api/video/stream
-// Direct streaming download endpoint for Vercel and serverless deployment
+// Direct universal streaming & download endpoint with Range support across all platforms
 router.get('/stream', async (req, res) => {
   try {
     const { url, quality = '720p', title = 'video' } = req.query;
@@ -786,11 +794,16 @@ router.get('/stream', async (req, res) => {
     const downloadName = `${cleanTitle}_${quality}.${ext}`;
     const isAttachment = req.query.download === '1' || req.query.dl === '1';
 
-    const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+    // 1. Check if directUrl parameter was pre-resolved
+    let targetStreamUrl = req.query.directUrl || null;
 
-    // On Serverless (Vercel): Use resilient media proxying with Range support
-    if (isServerless) {
-      // Record download stats
+    // 2. Resolve real stream URL dynamically across YouTube, TikTok, Twitter, Instagram, etc.
+    if (!targetStreamUrl) {
+      targetStreamUrl = await resolveRealMediaStream(url, quality, isAudio);
+    }
+
+    // 3. If stream URL resolved, stream directly with full Range 206 Partial Content support!
+    if (targetStreamUrl) {
       try {
         db.recordDownload(userId, {
           videoTitle: title,
@@ -803,45 +816,29 @@ router.get('/stream', async (req, res) => {
         });
       } catch (e) {}
 
-      // If URL is a direct media file, stream directly from source
-      if (url.endsWith('.mp4') || url.endsWith('.mp3') || url.endsWith('.webm') || url.includes('.googlevideo.com')) {
-        return streamMediaFile(url, req, res, downloadName, isAudio, isAttachment);
+      return streamMediaFile(targetStreamUrl, req, res, downloadName, isAudio, isAttachment);
+    }
+
+    // 4. If on local machine/Docker and yt-dlp binary is present, pipe yt-dlp child stream
+    const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+    if (!isServerless && ytDlp) {
+      const height = parseInt((quality || '720').replace('p', '')) || 720;
+      const flags = {
+        output: '-',
+        noWarnings: true,
+        noCheckCertificate: true,
+        jsRuntimes: 'node'
+      };
+      if (ffmpegPath) flags.ffmpegLocation = ffmpegPath;
+
+      if (isAudio) {
+        flags.format = 'bestaudio/140/best';
+      } else if (quality === 'best') {
+        flags.format = 'bestvideo+bestaudio/best[ext=mp4]/18/best';
+      } else {
+        flags.format = `bestvideo[height<=${height}][ext=mp4]+bestaudio/best[height<=${height}][ext=mp4]/18/best`;
       }
 
-      // Check for direct video URL scraped from OpenGraph
-      try {
-        const meta = await fetchRealMetadataFallback(url, 'general');
-        if (meta && meta.directVideoUrl) {
-          return streamMediaFile(meta.directVideoUrl, req, res, downloadName, isAudio, isAttachment);
-        }
-      } catch (e) {}
-
-      // High-performance CDN stream fallback for serverless
-      const fallbackSource = isAudio
-        ? 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
-        : 'https://www.w3schools.com/html/mov_bbb.mp4';
-
-      return streamMediaFile(fallbackSource, req, res, downloadName, isAudio, isAttachment);
-    }
-
-    // Local / Docker with yt-dlp binary
-    const flags = {
-      output: '-',
-      noWarnings: true,
-      noCheckCertificate: true
-    };
-    if (ffmpegPath) flags.ffmpegLocation = ffmpegPath;
-
-    if (isAudio) {
-      flags.format = 'bestaudio/best';
-    } else if (quality === 'best') {
-      flags.format = 'best[ext=mp4]/best';
-    } else {
-      const height = parseInt(quality.replace('p', '')) || 720;
-      flags.format = `best[height<=${height}][ext=mp4]/best[ext=mp4]/best`;
-    }
-
-    try {
       const child = ytDlp.exec(url, flags);
       let headersSet = false;
 
@@ -874,43 +871,35 @@ router.get('/stream', async (req, res) => {
           } catch (e) {}
           if (!res.writableEnded) res.end();
         } else if (!headersSet && !res.headersSent) {
-          console.warn(`yt-dlp stream exited with code ${code}, falling back to proxy stream`);
-          const fallbackSource = isAudio
-            ? 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
-            : 'https://www.w3schools.com/html/mov_bbb.mp4';
-          return streamMediaFile(fallbackSource, req, res, downloadName, isAudio, isAttachment);
+          res.status(502).json({
+            error: 'Failed to extract video stream from source. The video may be restricted or blocked.'
+          });
         } else if (!res.writableEnded) {
           res.end();
         }
       });
 
       child.on('error', err => {
-        console.warn('yt-dlp stream error, falling back to proxy stream:', err.message);
+        console.warn('yt-dlp stream error:', err.message);
         if (!headersSet && !res.headersSent) {
-          const fallbackSource = isAudio
-            ? 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
-            : 'https://www.w3schools.com/html/mov_bbb.mp4';
-          return streamMediaFile(fallbackSource, req, res, downloadName, isAudio, isAttachment);
+          res.status(502).json({
+            error: 'Failed to extract video stream from source: ' + err.message
+          });
         }
       });
-    } catch (execErr) {
-      console.warn('ytDlp.exec failed, falling back to proxy stream:', execErr.message);
-      if (!res.headersSent) {
-        const fallbackSource = isAudio
-          ? 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
-          : 'https://www.w3schools.com/html/mov_bbb.mp4';
-        return streamMediaFile(fallbackSource, req, res, downloadName, isAudio, isAttachment);
-      }
+
+      return;
     }
 
+    if (!res.headersSent) {
+      return res.status(502).json({
+        error: 'Media stream could not be extracted for this URL. Please verify the link is public and accessible.'
+      });
+    }
   } catch (e) {
     console.error('Stream route error:', e);
     if (!res.headersSent) {
-      const isAudio = (req.query.quality || '').includes('audio') || (req.query.quality || '').includes('mp3');
-      const fallbackSource = isAudio
-        ? 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
-        : 'https://www.w3schools.com/html/mov_bbb.mp4';
-      return streamMediaFile(fallbackSource, req, res, 'video.mp4', isAudio, false);
+      return res.status(500).json({ error: 'Stream processing error: ' + e.message });
     }
   }
 });
@@ -956,6 +945,16 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
 
     // Fast-path for Vercel / serverless: instant direct stream completion without background timeout
     if (isVercel) {
+      let directStream = null;
+      try {
+        directStream = await resolveRealMediaStream(url, quality, isAudio);
+      } catch (e) {}
+
+      const streamPath = directStream
+        ? `/api/video/stream?url=${encodeURIComponent(url)}&directUrl=${encodeURIComponent(directStream)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}`
+        : `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'video')}`;
+      const streamDownloadUrl = `${streamPath}&dl=1`;
+
       job.progress = 100;
       job.status = 'completed';
       job.currentStep = '✅ Download ready!';
@@ -1000,6 +999,7 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
       noWarnings: true,
       noCheckCertificate: true,
       newline: true,
+      jsRuntimes: 'node',
       userAgent: BROWSER_USER_AGENT,
       referer: url,
       addHeader: [
@@ -1013,24 +1013,24 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
     }
 
     if (isAudio) {
-      flags.format = 'bestaudio/best';
+      flags.format = 'bestaudio/140/best';
       flags.extractAudio = true;
       flags.audioFormat = 'mp3';
       flags.audioQuality = '0';
     } else if (quality === 'best') {
       if (ffmpegPath) {
-        flags.format = 'bestvideo+bestaudio/best';
+        flags.format = 'bestvideo+bestaudio/best[ext=mp4]/18/best';
         flags.mergeOutputFormat = 'mp4';
       } else {
-        flags.format = 'best[ext=mp4]/best';
+        flags.format = 'best[ext=mp4]/18/best';
       }
     } else {
       const height = parseInt(quality.replace('p', '')) || 720;
       if (ffmpegPath) {
-        flags.format = `bestvideo[height<=${height}]+bestaudio/best[height<=${height}]/best`;
+        flags.format = `bestvideo[height<=${height}][ext=mp4]+bestaudio/best[height<=${height}][ext=mp4]/18/best`;
         flags.mergeOutputFormat = 'mp4';
       } else {
-        flags.format = `best[height<=${height}][ext=mp4]/best[ext=mp4]/best`;
+        flags.format = `best[height<=${height}][ext=mp4]/18/best`;
       }
     }
 
@@ -1168,52 +1168,58 @@ async function processDownload(jobId, url, quality = '720p', title = 'video', us
 
       throw new Error('Downloaded file was not found in destination directory.');
     } catch (ytError) {
-      console.warn('yt-dlp execution failed, falling back to simulated output:', ytError.message);
+      console.warn('yt-dlp execution failed, falling back to universal stream resolver:', ytError.message);
 
-      // Simulation / Vercel fallback for demo
-      const userStats = db.getUserStats(userId);
-      const isFreeUser = userStats.plan.id === 'free';
-      const fallbackWatermarked = isFreeUser && !isAudio;
-      const fallbackExt = isAudio ? 'mp3' : 'mp4';
-      const fallbackUrl = isAudio
-        ? 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
-        : 'https://www.w3schools.com/html/mov_bbb.mp4';
-      const fallbackName = `${cleanTitle}_${quality}.${fallbackExt}`;
-
-      const fallbackStreamPath = `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'Video')}`;
-      const fallbackDownloadUrl = `${fallbackStreamPath}&dl=1`;
-
-      job.progress = 100;
-      job.status = 'completed';
-      job.currentStep = '✅ Download ready!';
-      job.result = {
-        filename: fallbackName,
-        title: resolvedTitle || 'Video',
-        size: isAudio ? '3.8 MB' : '15.4 MB',
-        quality: isAudio ? 'MP3 Audio' : quality,
-        isAudio: isAudio,
-        ext: fallbackExt,
-        path: fallbackStreamPath,
-        downloadUrl: fallbackDownloadUrl,
-        watermarked: fallbackWatermarked,
-        planId: userStats.plan.id,
-        planName: userStats.plan.name
-      };
-      jobStore.set(jobId, job);
-
+      let realStream = null;
       try {
-        db.recordDownload(userId, {
-          videoTitle: resolvedTitle || 'Video',
-          url,
-          thumbnail: resolvedThumb || '',
-          quality: isAudio ? 'MP3 Audio' : quality,
-          format: fallbackExt,
-          fileSize: isAudio ? '3.8 MB' : '15.4 MB',
-          filename: fallbackName,
-          downloadUrl: fallbackDownloadUrl,
-          watermarked: fallbackWatermarked
-        });
+        realStream = await resolveRealMediaStream(url, quality, isAudio);
       } catch (e) {}
+
+      if (realStream) {
+        const userStats = db.getUserStats(userId);
+        const isFreeUser = userStats.plan.id === 'free';
+        const fallbackWatermarked = isFreeUser && !isAudio;
+        const streamPath = `/api/video/stream?url=${encodeURIComponent(url)}&directUrl=${encodeURIComponent(realStream)}&quality=${quality}&title=${encodeURIComponent(resolvedTitle || 'Video')}`;
+        const streamDownloadUrl = `${streamPath}&dl=1`;
+
+        job.progress = 100;
+        job.status = 'completed';
+        job.currentStep = '✅ Download ready!';
+        job.result = {
+          filename: userDownloadName,
+          title: resolvedTitle || 'Video',
+          size: isAudio ? '3.8 MB' : '18.4 MB',
+          quality: isAudio ? 'MP3 Audio' : quality,
+          isAudio: isAudio,
+          ext: ext,
+          path: streamPath,
+          downloadUrl: streamDownloadUrl,
+          watermarked: fallbackWatermarked,
+          planId: userStats.plan.id,
+          planName: userStats.plan.name
+        };
+        jobStore.set(jobId, job);
+
+        try {
+          db.recordDownload(userId, {
+            videoTitle: resolvedTitle || 'Video',
+            url,
+            thumbnail: resolvedThumb || '',
+            quality: isAudio ? 'MP3 Audio' : quality,
+            format: ext,
+            fileSize: isAudio ? '3.8 MB' : '18.4 MB',
+            filename: userDownloadName,
+            downloadUrl: streamDownloadUrl,
+            watermarked: fallbackWatermarked
+          });
+        } catch (e) {}
+        return;
+      }
+
+      // If stream cannot be resolved at all:
+      job.status = 'error';
+      job.error = 'Failed to download or stream this video. The media source may be private, age-restricted, or protected.';
+      jobStore.set(jobId, job);
     }
   } catch (error) {
     console.error('Process download error:', error);

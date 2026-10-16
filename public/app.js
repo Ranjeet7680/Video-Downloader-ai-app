@@ -1109,7 +1109,8 @@ function pollJob(jobId, type = 'download', ctx = {}) {
       const quality = ctx.quality || state.selectedQualityId || '720p';
       const isAudio = quality.includes('audio') || quality.includes('mp3');
       const ext = isAudio ? 'mp3' : 'mp4';
-      const streamUrl = `${API_BASE}/video/stream?url=${encodeURIComponent(ctx.url || state.videoUrl)}&quality=${encodeURIComponent(quality)}&title=${encodeURIComponent(title)}&dl=1`;
+      const previewUrl = `${API_BASE}/video/stream?url=${encodeURIComponent(ctx.url || state.videoUrl)}&quality=${encodeURIComponent(quality)}&title=${encodeURIComponent(title)}`;
+      const streamUrl = `${previewUrl}&dl=1`;
 
       let fallbackJob = {
         id: jobId,
@@ -1127,7 +1128,7 @@ function pollJob(jobId, type = 'download', ctx = {}) {
           quality: isAudio ? 'MP3 Audio' : quality,
           isAudio: isAudio,
           ext: ext,
-          path: streamUrl,
+          path: previewUrl,
           downloadUrl: streamUrl,
           watermarked: false,
           planId: 'free',

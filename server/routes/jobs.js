@@ -85,8 +85,8 @@ router.get('/:jobId', (req, res) => {
         const quality = req.query.quality || '720p';
         const title = req.query.title || 'Video';
         const isAudio = quality.includes('audio') || quality.includes('mp3');
-        const ext = isAudio ? 'mp3' : 'mp4';
-        const streamUrl = `/api/video/stream?url=${encodeURIComponent(videoUrl || '')}&quality=${quality}&title=${encodeURIComponent(title)}&dl=1`;
+        const previewUrl = `/api/video/stream?url=${encodeURIComponent(videoUrl || '')}&quality=${quality}&title=${encodeURIComponent(title)}`;
+        const streamUrl = `${previewUrl}&dl=1`;
 
         job = {
           id: jobId,
@@ -102,7 +102,7 @@ router.get('/:jobId', (req, res) => {
             quality: isAudio ? 'MP3 Audio' : quality,
             isAudio: isAudio,
             ext: ext,
-            path: streamUrl,
+            path: previewUrl,
             downloadUrl: streamUrl,
             watermarked: false,
             planId: 'free',

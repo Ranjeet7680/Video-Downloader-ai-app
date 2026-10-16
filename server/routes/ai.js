@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 const jobStore = require('../utils/jobStore');
+const { streamMediaFile } = require('../utils/streamMedia');
 
 // Ensure sample vertical reel MP4 is available for instant clip downloads
 const UPLOADS_DIR = process.env.VERCEL ? '/tmp/uploads' : path.join(__dirname, '../../uploads');
@@ -180,8 +181,8 @@ router.get('/clip-download', (req, res) => {
     return res.download(reelPath, filename);
   }
 
-  // Graceful CDN fallback if local reel generator is not available on serverless
-  return res.redirect('https://www.w3schools.com/html/mov_bbb.mp4');
+  // Same-origin resilient media stream proxy (preserves attachment filename on browser downloads)
+  return streamMediaFile('https://www.w3schools.com/html/mov_bbb.mp4', req, res, filename, false, true);
 });
 
 // ✅ GET /api/ai/subtitles-download

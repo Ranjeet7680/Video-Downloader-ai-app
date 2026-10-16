@@ -26,12 +26,18 @@ function streamMediaFile(sourceUrl, req, res, downloadName = 'media.mp4', isAudi
         return streamMediaFile(redirectUrl, req, res, downloadName, isAudio, isAttachment);
       }
 
-      const statusCode = (upstreamRes.statusCode === 200 && req && req.headers && req.headers.range)
-        ? 206
-        : (upstreamRes.statusCode || 200);
+      // Only send 206 if upstream actually returned 206 and provided Content-Range.
+      // If upstream sent 200 (or chunked), maintain 200 so HTML5 video players can parse metadata and duration properly!
+      let statusCode = upstreamRes.statusCode || 200;
+      if (statusCode === 206 && !upstreamRes.headers['content-range']) {
+        statusCode = 200;
+      }
+      if (statusCode === 200 && upstreamRes.headers['content-range']) {
+        statusCode = 206;
+      }
 
       res.statusCode = statusCode;
-      res.setHeader('Content-Type', isAudio ? 'audio/mpeg' : 'video/mp4');
+      res.setHeader('Content-Type', upstreamRes.headers['content-type'] || (isAudio ? 'audio/mpeg' : 'video/mp4'));
       res.setHeader('Content-Disposition', `${isAttachment ? 'attachment' : 'inline'}; filename="${downloadName}"`);
       res.setHeader('Accept-Ranges', 'bytes');
 
@@ -41,6 +47,11 @@ function streamMediaFile(sourceUrl, req, res, downloadName = 'media.mp4', isAudi
       if (upstreamRes.headers['content-range']) {
         res.setHeader('Content-Range', upstreamRes.headers['content-range']);
       }
+
+      // Cleanup upstream request on client disconnection / pause
+      res.on('close', () => {
+        try { forwardReq.destroy(); } catch (e) {}
+      });
 
       upstreamRes.pipe(res);
     });

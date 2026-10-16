@@ -783,16 +783,17 @@ router.get('/stream', async (req, res) => {
     const downloadName = `${cleanTitle}_${quality}.${ext}`;
     const isAttachment = req.query.download === '1' || req.query.dl === '1';
 
-    // Enforce plan quota on actual attachment download (Save button), not on player preview playback
+    // Quality tier restriction for direct file downloads
     if (isAttachment) {
-      const check = db.canUserDownload(userId, quality);
-      if (!check.allowed) {
+      const stats = db.getUserStats(userId);
+      const reqHeight = parseInt(String(quality).replace('p', '')) || 720;
+      if (reqHeight > stats.plan.maxHeight && quality !== 'audio') {
         return res.status(403).json({
           success: false,
           limitReached: true,
-          reason: check.reason,
-          message: check.message,
-          stats: check.stats
+          reason: 'QUALITY_RESTRICTED',
+          message: `${quality} quality is locked on ${stats.plan.name} (Max: ${stats.plan.maxQuality}). Upgrade to Pro or VIP to unlock high-definition downloads!`,
+          stats
         });
       }
     }
@@ -807,20 +808,6 @@ router.get('/stream', async (req, res) => {
 
     // 3. If stream URL resolved, stream directly with full Range 206 Partial Content support!
     if (targetStreamUrl) {
-      if (isAttachment) {
-        try {
-          db.recordDownload(userId, {
-            videoTitle: title,
-            url,
-            quality: isAudio ? 'MP3 Audio' : quality,
-            format: ext,
-            fileSize: isAudio ? '3.8 MB' : '18.4 MB',
-            filename: downloadName,
-            downloadUrl: `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(title)}&userId=${encodeURIComponent(userId)}&dl=1`
-          });
-        } catch (e) {}
-      }
-
       return streamMediaFile(targetStreamUrl, req, res, downloadName, isAudio, isAttachment);
     }
 
@@ -863,17 +850,19 @@ router.get('/stream', async (req, res) => {
 
       child.on('close', code => {
         if (code === 0) {
-          try {
-            db.recordDownload(userId, {
-              videoTitle: title,
-              url,
-              quality: isAudio ? 'MP3 Audio' : quality,
-              format: ext,
-              fileSize: 'Streamed',
-              filename: downloadName,
-              downloadUrl: `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(title)}&dl=1`
-            });
-          } catch (e) {}
+          if (isAttachment) {
+            try {
+              db.recordDownload(userId, {
+                videoTitle: title,
+                url,
+                quality: isAudio ? 'MP3 Audio' : quality,
+                format: ext,
+                fileSize: 'Streamed',
+                filename: downloadName,
+                downloadUrl: `/api/video/stream?url=${encodeURIComponent(url)}&quality=${quality}&title=${encodeURIComponent(title)}&userId=${encodeURIComponent(userId)}&dl=1`
+              });
+            } catch (e) {}
+          }
           if (!res.writableEnded) res.end();
         } else if (!headersSet && !res.headersSent) {
           res.status(502).json({
